@@ -1,0 +1,113 @@
+.cl-internal-b3fm6y {
+  display: none !important; /* Clerk 로딩 배경 제거 */
+}
+
+/* 스크롤바 처리를 위한 전역 스타일 수정 */
+:root {
+  --scrollbar-width: 0px;
+}
+
+html {
+  width: 100vw;
+  overflow-x: hidden;
+  /* 스크롤바 항상 표시, 가로 스크롤 방지 */
+  overflow-y: scroll !important;
+  scroll-behavior: smooth;
+  /* 중요: 스크롤바 사라지는 현상 방지 */
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+body {
+  width: 100%;
+  overflow-x: hidden;
+  /* 모달 열릴 때도 스크롤바 유지 */
+  overflow-y: scroll !important;
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+  /* 강제로 레이아웃 고정 */
+  position: relative;
+  max-width: 100vw;
+}
+
+/* 모달 열릴 때 body 스타일 */
+body.cl-modalOpen {
+  overflow: hidden !important;
+  position: fixed;
+  top: var(--scroll-top, 0px);
+  width: 100%;
+  /* 스크롤바 영역 보상을 위한 패딩 추가 */
+  padding-right: var(--scrollbar-width, 0px) !important;
+}
+
+/* Clerk 모달 스타일 개선 */
+.cl-modalBackdrop,
+.cl-modal-backdrop {
+  overflow: hidden !important;
+  backdrop-filter: blur(8px) !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.cl-modal,
+.cl-card,
+.cl-rootBox {
+  border-radius: 1rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.cl-button-primary {
+  background-color: #3B82F6 !important; /* Tailwind blue-500 */
+}
+
+.cl-modal {
+  z-index: 9999 !important;
+}
+
+.cl-modal-backdrop {
+  z-index: 9998 !important;
+}
+
+.blob-container {
+  z-index: 0 !important;
+  pointer-events: none;
+}
+
+@keyframes blob {
+  0%, 100% { 
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.3;
+  }
+  50% { 
+    transform: translate(5%, -5%) scale(1.05) rotate(3deg);
+    opacity: 0.15;
+  }
+}
+
+.animate-blob {
+  animation: blob 15s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* 배경 투명도 조정을 위한 유틸리티 클래스 */
+.bg-gradient-soft {
+  opacity: 0.5;
+}
+
+/* 동일한 클래스명 중복 사용 방지 */
+.blob-animation-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+header {
+  transition: backdrop-filter 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
+} 

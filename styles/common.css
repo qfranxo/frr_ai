@@ -1,0 +1,12 @@
+/* 공통으로 사용되는 스타일 분리 */
+.gradient-text {
+  @apply bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent;
+}
+
+.card-hover {
+  @apply hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02];
+}
+
+.button-gradient {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700;
+} 

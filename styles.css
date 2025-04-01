@@ -1,0 +1,104 @@
+/* 전체 헤더 컨테이너 */
+header {
+  width: 100%;
+  border-bottom: 1px solid #eaeaea;
+  background: white;
+}
+
+.header-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* 로고 영역 */
+.logo {
+  flex: 1;
+  max-width: 200px;
+}
+
+.logo a {
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: inherit;
+}
+
+/* 네비게이션 영역 */
+.nav-buttons {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: 3rem; /* 메뉴 간격 늘림 */
+}
+
+.nav-buttons a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* 인증 버튼 영역 */
+.auth-buttons {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  align-items: center;
+  max-width: 200px;
+}
+
+.auth-buttons button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+.login-btn {
+  color: #333;
+}
+
+.signup-btn {
+  background-color: #007bff;
+  color: white;
+}
+
+.signup-btn:hover {
+  background-color: #0056b3;
+}
+
+/* UserButton 스타일링 */
+.cl-userButtonBox {
+  height: 2rem;
+}
+
+/* 메인 타이틀 스타일 */
+.main-title {
+  font-size: 2.5rem;
+  line-height: 1.4;
+  margin: 2rem 0;
+  padding: 0 1rem;
+  text-align: center;
+  word-break: keep-all; /* 단어 분리 방지 */
+  overflow-wrap: break-word; /* 긴 단어 줄바꿈 */
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .main-title {
+    font-size: 2rem;
+    padding: 0 2rem;
+  }
+  
+  .nav-buttons {
+    gap: 1.5rem;
+  }
+} 
