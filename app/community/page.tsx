@@ -14,6 +14,8 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal';
 import { communityApi } from '@/lib/api';
 import LoadingScreen from '@/components/shared/LoadingScreen';
 import { ImageCard } from '@/components/shared/ImageCard';
+import { v4 as uuidv4 } from 'uuid';
+import { logManager } from '@/lib/logger';
 
 // 댓글 타입 정의
 interface Comment {
@@ -39,6 +41,12 @@ interface GenerationPost {
   createdAt: string;
   likes?: number;
   comments?: Comment[];
+  cameraDistance?: string;
+  eyeColor?: string;
+  skinType?: string;
+  hairStyle?: string;
+  modelVersion?: string;
+  background?: string;
 }
 
 // 카테고리 정의
@@ -308,6 +316,21 @@ const CategoryButton = ({ id, label, isSelected, onClick }: CategoryButtonProps)
   );
 };
 
+// 마지막 데이터 로드 시간을 저장하는 전역 변수
+let lastCommunityDataFetch = 0;
+
+// 탭과 정렬 순서를 위한 enum
+enum Tab {
+  All = "all",
+  Liked = "liked",
+  Mine = "mine"
+}
+
+enum SortOrder {
+  Latest = "latest",
+  Popular = "popular"
+}
+
 export default function CommunityPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
@@ -317,6 +340,14 @@ export default function CommunityPage() {
   const [deletedImages, setDeletedImages] = useState<Record<string, boolean>>({});
   const [categoryImageDeleted, setCategoryImageDeleted] = useState<Record<string, boolean>>({});
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [currentTab, setCurrentTab] = useState<Tab>(Tab.All);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(SortOrder.Latest);
+  const [showBanner, setShowBanner] = useState<boolean>(true);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [selectedImageLikes, setSelectedImageLikes] = useState<number>(0);
+  const [gridRows, setGridRows] = useState<number>(3);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [isDeletingPost, setIsDeletingPost] = useState<boolean>(false);
   
   // Clerk에서 사용자 정보 가져오기
   const { user, isSignedIn } = useUser();
@@ -423,91 +454,155 @@ export default function CommunityPage() {
     };
   }, []);
 
-  // 페이지 상단으로 스크롤하는 함수
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
-  };
-
-  // 데이터 가져오기 및 필터링 설정
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // 통합된 API 호출 사용
-        const result = await communityApi.loadCommunityData(true);
-        
-        if (result.success) {
-          const newData = result.data;
-          setCommunityData(newData);
-          console.log("Community data loaded:", newData.length, "images", "source:", result.source || "unknown");
-          
-          // 캐시 및 상태 초기화
-          setDeletedImages({});  // 삭제된 이미지 목록 초기화
-        } else {
-          throw new Error(result.error || 'Failed to fetch community data');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        console.error('Error fetching community data:', err);
-      } finally {
-        setIsLoading(false);
+  // 커뮤니티 데이터 가져오기
+  const fetchCommunityData = useCallback(async (forceRefresh = false) => {
+    try {
+      setIsLoading(true);
+      
+      logManager.info('[커뮤니티] 데이터 로드 시작', { module: 'core' });
+      const result = await communityApi.getPosts();
+      
+      // API 응답 형식 확인 (success, data 구조)
+      if (result && typeof result === 'object' && 'success' in result && 
+          result.success === true && 'data' in result && Array.isArray(result.data)) {
+        // success: true, data: Array 형식일 경우
+        const data = result.data as any[];
+        logManager.info(`[커뮤니티] 데이터 로드 성공: ${data.length}개 게시물`, { 
+          module: 'core',
+          data: { count: data.length }
+        });
+        setCommunityData(data);
+      } else if (result && Array.isArray(result)) {
+        // 직접 배열이 반환될 경우 (이전 형식)
+        logManager.info(`[커뮤니티] 데이터 로드 성공: ${result.length}개 게시물`, { 
+          module: 'core',
+          data: { count: result.length }
+        });
+        setCommunityData(result);
+      } else {
+        logManager.error('[커뮤니티] 데이터 로드 실패: 잘못된 응답 형식', { 
+          module: 'core',
+          data: result
+        });
+        setError('서버에서 올바른 형식의 데이터를 받지 못했습니다.');
+        toast.error('커뮤니티 데이터를 불러오는데 실패했습니다.');
       }
-    };
-    
-    fetchData();
-    
-    // 컴포넌트 언마운트 시 정리 작업을 위한 빈 함수 리턴
-    return () => {};
+    } catch (error) {
+      logManager.error('[커뮤니티] 데이터 로드 오류', { 
+        module: 'core',
+        data: error 
+      });
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.');
+      toast.error('커뮤니티 데이터를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // 각 카테고리에서 1장씩 삭제하는 함수
+  // 초기 데이터 로드
+  useEffect(() => {
+    fetchCommunityData(true); // 최초 로드는 강제 갱신
+  }, [fetchCommunityData]);
+  
+  // 로그인 상태 변경 시 데이터 다시 로드 (스로틀링 적용)
+  const lastLoginRefreshRef = useRef(0);
+  
+  useEffect(() => {
+    // 페이지 로딩 시 로그인 상태 변경 감지
+    if (user && user.id) {
+      const now = Date.now();
+      if (now - lastLoginRefreshRef.current > 60000) {
+        lastLoginRefreshRef.current = now;
+        logManager.info('[커뮤니티] 로그인 상태 변경됨, 데이터 다시 로드', {
+          module: 'core'
+        });
+        fetchCommunityData(false); // 캐시 사용 허용
+      } else {
+        logManager.info('[커뮤니티] 최근에 로그인 기반 새로고침을 했으므로 스킵 (60초 제한)', {
+          module: 'core'
+        });
+      }
+    }
+  }, [user, fetchCommunityData]);
+
+  // 카테고리별 이미지 삭제 함수
   const deleteOneImagePerCategory = async (data: GenerationPost[]) => {
-    for (const category of categoriesToDelete) {
-      const categoryImages = data.filter(post => post.category === category);
+    // 현재 로그인한 사용자만 삭제할 수 있음
+    if (!user || !user.id) {
+      toast.error('로그인 후 사용할 수 있습니다.');
+      return;
+    }
+    
+    const userId = user.id;
+    
+    // 카테고리별 이미지 그룹화
+    const categorizedPosts: Record<string, GenerationPost[]> = {};
+    
+    data.forEach(post => {
+      const category = post.category || getCategoryFromStyle(post.renderingStyle);
       
-      if (categoryImages.length > 0 && !categoryImageDeleted[category]) {
-        try {
-          // 첫 번째 이미지를 삭제
-          const imageToDelete = categoryImages[0];
-          
-          // 통합된 API 호출 사용
-          await communityApi.deletePost(imageToDelete.id, currentUser.id);
-          
-          // 삭제된 이미지 상태 업데이트
-          setDeletedImages(prev => ({
-            ...prev,
-            [imageToDelete.id]: true
-          }));
-          
-          // 해당 카테고리 처리 완료 표시
-          setCategoryImageDeleted(prev => ({
-            ...prev,
-            [category]: true
-          }));
-          
-          // 화면에서도 삭제
-          setCommunityData(prev => prev.filter(item => item.id !== imageToDelete.id));
-          
-          console.log(`Deleted one image from ${category} category`);
-        } catch (error) {
-          console.error(`Error deleting image from ${category}:`, error);
+      if (!categorizedPosts[category]) {
+        categorizedPosts[category] = [];
+      }
+      
+      categorizedPosts[category].push(post);
+    });
+    
+    // 카테고리별로 하나씩 이미지 삭제
+    for (const category in categorizedPosts) {
+      const categoryPosts = categorizedPosts[category];
+      
+      if (categoryPosts.length <= 1) {
+        continue; // 카테고리에 이미지가 하나 이하면 삭제하지 않음
+      }
+      
+      try {
+        const imageToDelete = categoryPosts[0]; // 첫 번째 이미지 선택
+        
+        if (imageToDelete && imageToDelete.id) {
+          try {
+            await communityApi.deletePost(imageToDelete.id, userId);
+            // 로컬 상태에서도 이미지 제거
+            setCommunityData(prev => prev.filter(item => item.id !== imageToDelete.id));
+            
+            logManager.info(`Deleted one image from ${category} category`, {
+              module: 'core'
+            });
+          } catch (error) {
+            logManager.error(`Error deleting image from ${category}:`, {
+              module: 'core',
+              data: error
+            });
+          }
         }
+      } catch (e) {
+        // 예외 처리
       }
     }
   };
 
   // 카테고리별 필터링
   const filteredPosts = communityData.filter(post => {
+    // Replicate URL은 필터링하지 않고 imageUrl이 없는 경우만 제외
+    if (!post.imageUrl) {
+      return false;
+    }
+    
     if (selectedCategory === 'all') return true;
     if (selectedCategory === 'my-cards') {
       // 현재 사용자가 작성한 이미지만 표시
       return post.userId === currentUser.id;
     }
     return post.category === selectedCategory;
+  }).map(post => {
+    // 이미지 URL 확인
+    let imageUrl = post.imageUrl;
+    
+    // 원본 URL 그대로 사용 (저장은 ImageCard 컴포넌트에서 처리)
+    return {
+      ...post,
+      imageUrl: imageUrl || '/fallback-image.png'
+    };
   });
   
   // 카테고리별 샘플 프롬프트 가져오기
@@ -548,28 +643,158 @@ export default function CommunityPage() {
       // 댓글 배열의 각 항목이 유효한지 확인
       return comments.filter(comment => comment && typeof comment === 'object');
     } catch (error) {
-      console.error('댓글 정보 가져오기 오류:', error);
+      logManager.error('댓글 정보 가져오기 오류:', {
+        module: 'comments',
+        data: error
+      });
       return defaultComments;
     }
   };
   
   // 공유하기 기능
-  const handleShare = (post: GenerationPost) => {
-    // 현재 URL 기준으로 공유 URL 생성
-    const shareUrl = `${window.location.origin}/shared/${post.id}`;
-    
-    // 클립보드에 복사
-    navigator.clipboard.writeText(shareUrl)
-      .then(() => {
-        toast.success('Link copied to clipboard!', {
-          position: 'top-center'
-        });
-      })
-      .catch(() => {
-        toast.error('Failed to copy link to clipboard.', {
-          position: 'top-center'
-        });
+  const handleShare = async (imageId: string) => {
+    try {
+      // 이미지 검색
+      const imageToShare = communityData.find(img => img.id === imageId);
+      if (!imageToShare) {
+        throw new Error("공유할 이미지를 찾을 수 없습니다");
+      }
+      
+      logManager.info("Sharing image:", {
+        module: 'core',
+        data: { imageId }
       });
+      
+      // 원본 데이터 상세 로깅
+      console.log("📊 커뮤니티 - 공유할 이미지 원본 데이터:", {
+        id: imageToShare.id,
+        aspectRatio: imageToShare.aspectRatio,
+        renderingStyle: imageToShare.renderingStyle,
+        category: imageToShare.category,
+        background: imageToShare.background,
+        gender: imageToShare.gender,
+        age: imageToShare.age
+      });
+      
+      // 공유 데이터 준비
+      const formData = new FormData();
+      
+      // 필수 필드
+      formData.append('prompt', imageToShare.prompt);
+      formData.append('image_url', imageToShare.imageUrl);
+      
+      // 값이 있는 선택적 필드만 추가 (엄격하게 체크)
+      const addIfExists = (key: string, value: any) => {
+        if (value !== undefined && value !== null && value !== '') {
+          console.log(`✅ 커뮤니티 필드 추가: ${key} = ${value}`);
+          formData.append(key, value);
+        }
+      };
+      
+      // 중요 필드들
+      addIfExists('rendering_style', imageToShare.renderingStyle);
+      
+      // 특별히 주의해야 할 필드들 (화면에 EMPTY로 표시되는 필드들)
+      if (imageToShare.aspectRatio && imageToShare.aspectRatio !== '1:1') {
+        console.log("🔍 커뮤니티 특별 확인: aspect_ratio =", imageToShare.aspectRatio);
+        formData.append('aspect_ratio', imageToShare.aspectRatio);
+      }
+      
+      if (imageToShare.category && imageToShare.category !== 'other') {
+        console.log("🔍 커뮤니티 특별 확인: category =", imageToShare.category);
+        formData.append('category', imageToShare.category);
+      }
+      
+      // 기타 선택적 필드들
+      addIfExists('gender', imageToShare.gender);
+      addIfExists('age', imageToShare.age);
+      addIfExists('background', imageToShare.background);
+      addIfExists('camera_distance', imageToShare.cameraDistance);
+      addIfExists('eye_color', imageToShare.eyeColor);
+      addIfExists('skin_type', imageToShare.skinType);
+      addIfExists('hair_style', imageToShare.hairStyle);
+      addIfExists('model_version', imageToShare.modelVersion);
+      
+      // 필수 추가 필드
+      formData.append('shared', 'true');
+      formData.append('created_at', new Date().toISOString());
+      formData.append('source', 'community');
+      
+      // Clerk 사용자 이름 추가 (로그인한 경우)
+      if (user && user.id) {
+        const userName = user.fullName || user.firstName || user.username || '';
+        console.log("👤 커뮤니티에서 전송할 user_name 값:", userName);
+        formData.append('user_name', userName);
+      }
+      
+      // 디버깅: formData 내용 확인
+      console.log('🧾 커뮤니티 페이지 formData entries:');
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key} = ${value}`);
+      }
+      
+      // ✅ Clerk user_id는 API 서버에서 auth()로 받아 사용
+      // - 클라이언트에서는 전송하지 않음 (API에서 처리)
+      
+      // ✅ id 필드는 절대 전송하지 않음 (Supabase가 자동 생성)
+      
+      // API 호출
+      const response = await fetch('/api/share', {
+        method: 'POST',
+        body: formData
+      });
+      
+      // 디버깅: 응답 상태 확인
+      console.log('📡 커뮤니티 응답 상태:', response.status, response.statusText);
+      
+      // 응답 확인
+      if (!response.ok) {
+        const errorData = await response.json();
+        logManager.error("Share API error:", {
+          module: 'core',
+          data: errorData
+        });
+        throw new Error(errorData.error || `공유 실패: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      logManager.info("Share success:", {
+        module: 'core',
+        data: result
+      });
+      
+      // 성공 시 처리
+      toast.success('이미지가 성공적으로 공유되었습니다');
+      
+      // ✅ 페이지 데이터 갱신 - 캐시 무효화 방식
+      // 옵션 1: 페이지 reload (간단한 방법)
+      // window.location.href = '/community';
+      
+      // 옵션 2: 데이터 다시 가져오기
+      const refreshData = async () => {
+        try {
+          const result = await communityApi.getPosts();
+          if (result && Array.isArray(result)) {
+            setCommunityData(result);
+          }
+        } catch (error) {
+          logManager.error("Error refreshing data:", {
+            module: 'core',
+            data: error
+          });
+        }
+      };
+      
+      // 데이터 새로고침
+      refreshData();
+      
+    } catch (error) {
+      logManager.error("Share failed:", {
+        module: 'core',
+        data: error instanceof Error ? error.message : "Unknown error"
+      });
+      toast.error('이미지 공유 중 오류가 발생했습니다');
+    }
   };
   
   // 사용자 이름 표시 함수
@@ -598,7 +823,10 @@ export default function CommunityPage() {
       // Clerk ID 형식인 경우 간략화
       return userId.startsWith('user_') ? 'Anonymous User' : userId;
     } catch (error) {
-      console.error('사용자 이름 표시 오류:', error);
+      logManager.error('사용자 이름 표시 오류:', {
+        module: 'core',
+        data: error
+      });
       return 'Anonymous User';
     }
   };
@@ -637,27 +865,46 @@ export default function CommunityPage() {
     return userName;
   };
   
-  // 게시물 삭제 처리 함수
+  // 게시물 삭제 처리
   const handleDeletePost = async (postId: string) => {
+    // 로그인되지 않았으면 에러 메시지 표시
+    if (!user || !user.id) {
+      toast.error('로그인 후 사용할 수 있습니다.', {
+        position: 'top-center'
+      });
+      return;
+    }
+    
+    // 이미 처리 중이면 중복 요청 방지
+    if (isDeletingPost) {
+      return;
+    }
+    
+    // 삭제 함수
     try {
-      // 낙관적 UI 업데이트
-      setCommunityData(prev => prev.filter(post => post.id !== postId));
-      
-      // 통합된 API 호출 사용
-      const result = await communityApi.deletePost(postId, currentUser.id);
-      
-      if (!result.success) {
-        // 실패 시 UI 복원
-        window.location.reload();
+      if (window.confirm('정말 이 게시물을 삭제하시겠습니까?')) {
+        // API 호출
+        setIsDeletingPost(true);
+        const result = await communityApi.deletePost(postId, user?.id || '');
+        
+        if (result && result.success) {
+          toast.success('게시물이 삭제되었습니다.');
+          // 게시물 목록에서 제거
+          setCommunityData(prev => prev.filter(item => item.id !== postId));
+        } else {
+          toast.error(result.error || '게시물 삭제에 실패했습니다.');
+        }
       }
     } catch (error) {
-      console.error('Error deleting post:', error);
+      logManager.error('Error deleting post:', { 
+        module: 'core',
+        data: error 
+      });
       toast.error('Failed to delete post.', {
         position: 'top-center'
       });
-      
-      // 에러 시 UI 복원
-      window.location.reload();
+    } finally {
+      setIsDeletingPost(false);
     }
   };
   
@@ -959,7 +1206,10 @@ export default function CommunityPage() {
                       
                       return timeB - timeA;
                     } catch (error) {
-                      console.error('댓글 정렬 오류:', error);
+                      logManager.error('댓글 정렬 오류:', {
+                        module: 'comments',
+                        data: error
+                      });
                       return 0;
                     }
                   })
@@ -1051,7 +1301,10 @@ export default function CommunityPage() {
       {/* 상단으로 스크롤 버튼 */}
       {showScrollTop && (
         <button
-          onClick={scrollToTop}
+          onClick={() => window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+          })}
           className="fixed bottom-6 sm:bottom-8 right-6 sm:right-8 z-40 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center hover:bg-blue-700 hover:scale-105 transition-all duration-200"
           aria-label="맨 위로 스크롤"
         >

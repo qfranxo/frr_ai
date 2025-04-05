@@ -1,14 +1,33 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
-import { Heart, MessageCircle, Share2, Trash2, Download } from "lucide-react";
+import { Heart, MessageCircle, Share2, Trash2, Download, Sparkles } from "lucide-react";
 import { CommentModal } from '@/components/shared/CommentModal';
 import { ConfirmModal } from '@/components/shared/ConfirmModal';
 import { formatDate } from '@/utils/format';
 import { Comment } from '@/types/post';
 import { AuthLikeButton, AuthCommentButton } from '@/components/shared/AuthButtons';
 import { SignInButton } from '@clerk/nextjs';
+import { processImageUrl, isReplicateUrl, isSupabaseUrl } from '@/utils/image-utils';
+
+// 전역 변수로 이미지 로드 오류 상태 관리 (컴포넌트 외부에 선언)
+const failedImageIds = new Set<string>();
+
+// 프로덕션 환경에서 로그 최소화를 위한 로거
+const logger = {
+  log: (message: string, ...args: any[]) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(message, ...args);
+    }
+  },
+  error: (message: string, ...args: any[]) => {
+    console.error(message, ...args);
+  }
+};
+
+// URL 유형별 처리 결과를 캐싱하기 위한 Map
+const processedImageUrlsCache = new Map<string, boolean>();
 
 // 카테고리 관련 함수들
 const getCategoryFromStyle = (style: string): string => {
@@ -150,6 +169,142 @@ export function ImageCard({
     commentId: '' as string | number
   });
   
+  // 이미지 로드 상태를 ref로 변경하여 리렌더링 방지
+  const imageStatusRef = useRef({
+    loaded: false,
+    error: false
+  });
+  
+  // 이미지 URL 처리 - 이미 실패한 이미지는 바로 fallback 사용
+  const imageUrl = useMemo(() => {
+    if (!post.imageUrl) return '/fallback-image.png';
+    if (failedImageIds.has(post.id)) return '/fallback-image.png';
+    
+    try {
+      // URL 유효성 검사
+      if (post.imageUrl.trim() === '') return '/fallback-image.png';
+      
+      // 상대 경로인 경우 그대로 반환
+      if (post.imageUrl.startsWith('/')) return post.imageUrl;
+      
+      // URL 객체로 생성 시도하여 유효성 검사
+      try {
+        new URL(post.imageUrl);
+        return post.imageUrl; // 유효한 URL 반환
+      } catch (e) {
+        console.error(`[심각] ID: ${post.id} 유효하지 않은 URL 형식:`, post.imageUrl);
+        return '/fallback-image.png';
+      }
+    } catch (error) {
+      console.error(`[심각] ID: ${post.id} URL 처리 오류:`, error);
+      return '/fallback-image.png';
+    }
+  }, [post.id, post.imageUrl]);
+  
+  // 이미지 컴포넌트의 src 속성 설정
+  const imageSrc = useMemo(() => {
+    // 빈 문자열이나 유효하지 않은 URL이 전달되는 것을 방지
+    if (!imageUrl || imageUrl.trim() === '') {
+      return '/fallback-image.png';
+    }
+    return imageUrl;
+  }, [imageUrl]);
+  
+  // 이미지 URL 타입 디버깅 - 마운트 시 한 번만 실행
+  useEffect(() => {
+    if (!post.imageUrl) return;
+    
+    // 이미 실패한 이미지는 패스
+    if (failedImageIds.has(post.id)) return;
+    
+    // 이미 처리한 URL은 다시 처리하지 않음
+    if (processedImageUrlsCache.has(post.id)) return;
+    
+    // URL 유형 감지
+    const isReplicate = isReplicateUrl(post.imageUrl);
+    const isSupabase = isSupabaseUrl(post.imageUrl);
+    
+    logger.log(`[URL] ID: ${post.id}, Type: ${isReplicate ? 'Replicate' : isSupabase ? 'Supabase' : 'Other'}`);
+    
+    // 처리된 것으로 표시
+    processedImageUrlsCache.set(post.id, true);
+    
+    // Replicate URL인 경우 저장 로직을 한 번만 트리거 (오류 무시)
+    if (isReplicate && typeof window !== 'undefined') {
+      // 단, 이미지 접근성 먼저 테스트하여 Replicate URL이 유효한지 확인
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 타임아웃
+      
+      fetch(post.imageUrl, { 
+        method: 'HEAD', 
+        signal: controller.signal
+      })
+        .then(response => {
+          clearTimeout(timeoutId);
+          if (response.ok) {
+            logger.log(`[URL] ID: ${post.id}, 접근 테스트: 성공`);
+            
+            // 저장 로직은 이미지가 실제로 로드된 후 트리거되도록 타임아웃 설정
+            const img = new window.Image();
+            img.onload = () => {
+              // Replicate URL이 유효하므로 저장 시도
+              // 저장할 이미지 타입 결정 - 컴포넌트의 variant나 post의 타입 정보를 기반으로 결정
+              const storageType = determineStorageType(post, variant);
+              
+              import('@/utils/image-utils').then(utils => {
+                utils.saveReplicateUrlToStorage(post.imageUrl, post.id, currentUser?.id, storageType);
+              }).catch(e => {
+                logger.error(`[오류] 저장 모듈 로드 실패:`, e);
+              });
+            };
+            img.src = post.imageUrl;
+          } else {
+            logger.log(`[URL] ID: ${post.id}, 접근 테스트: 실패 (${response.status})`);
+            failedImageIds.add(post.id);
+          }
+        })
+        .catch(err => {
+          clearTimeout(timeoutId);
+          logger.log(`[URL] ID: ${post.id}, 접근 오류: ${err.message || '알 수 없음'}`);
+          failedImageIds.add(post.id);
+        });
+    }
+  }, [post.id, post.imageUrl, currentUser?.id, variant]);
+  
+  // 저장할 이미지 타입 결정 함수
+  function determineStorageType(post: any, variant: string): 'shared' | 'user-images' | 'generations' {
+    // 게시물 타입이 명시적으로 있으면 사용
+    if (post.type === 'shared' || post.type === 'user-images' || post.type === 'generations') {
+      return post.type;
+    }
+    
+    // variant에 따라 타입 추론
+    if (variant === 'main') {
+      return 'generations'; // 메인 페이지의 이미지는 생성된 이미지로 간주
+    } else if (variant === 'community') {
+      return 'shared'; // 커뮤니티 페이지의 이미지는 공유된 이미지로 간주
+    }
+    
+    // 게시물의 다른 속성으로 추론
+    if (post.isShared || post.shared) {
+      return 'shared';
+    } else if (post.userId === currentUser?.id) {
+      return 'user-images'; // 현재 사용자의 이미지
+    }
+    
+    // 기본값
+    return 'shared';
+  }
+  
+  // 컴포넌트 마운트 시 한 번만 실행
+  useEffect(() => {
+    // 이미지 로드 상태 초기화 (불필요한 preload 제거)
+    imageStatusRef.current = {
+      loaded: false,
+      error: false
+    };
+  }, []);
+  
   // 현재 사용자가 게시물 작성자인지 확인
   const isCurrentUserPostOwner = currentUser && (
     (post.userId && currentUser.id === post.userId) || 
@@ -238,12 +393,64 @@ export function ImageCard({
       {/* 이미지 섹션 */}
       <div className={`relative ${variant === 'community' ? 'p-3 sm:p-4' : 'p-0'}`}>
         <div className={`relative overflow-hidden ${variant === 'community' ? 'rounded-xl' : 'rounded-t-2xl'}`}>
-          <img 
-            src={post.imageUrl} 
-            alt={post.prompt || post.title || 'Generated image'} 
-            className={`w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105 ${variant === 'community' ? 'rounded-xl' : 'rounded-t-2xl'} ${!isSignedIn ? 'blur-[2px]' : ''}`}
-            style={{ aspectRatio: post.aspectRatio || '1/1' }}
-          />
+          {post.imageUrl ? (
+            <div className="relative w-full h-0 pb-[100%]" style={{ 
+              paddingBottom: '100%' // 모든 이미지를 1:1 비율로 표시
+            }}>
+              <Image
+                src={imageSrc || '/fallback-image.png'}
+                alt={post.prompt || post.title || 'Generated image'}
+                fill
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                className={`object-cover transition-transform duration-300 group-hover:scale-105 ${variant === 'community' ? 'rounded-xl' : 'rounded-t-2xl'} ${!isSignedIn ? 'blur-[2px]' : ''}`}
+                unoptimized={true}
+                loading="lazy"
+                onLoad={() => {
+                  // 이미지가 성공적으로 로드됨
+                  // 프로덕션 환경에서는 로그 최소화
+                  logger.log(`[이미지] ID: ${post.id} 로드 성공`);
+                  
+                  // 이미지 로딩 상태 업데이트
+                  imageStatusRef.current.loaded = true;
+                  
+                  // Replicate URL인 경우에만 저장 시도
+                  if (isReplicateUrl(post.imageUrl) && !processedImageUrlsCache.has(`saved-${post.id}`)) {
+                    logger.log(`[이미지] ID: ${post.id} Replicate URL 감지, 저장 시도`);
+                    
+                    // 중복 저장 방지
+                    processedImageUrlsCache.set(`saved-${post.id}`, true);
+                    
+                    // 저장 유틸리티 함수 동적 로드 및 호출
+                    import('@/utils/image-utils').then(utils => {
+                      utils.saveReplicateUrlToStorage(post.imageUrl, post.id, currentUser?.id);
+                    }).catch(e => {
+                      logger.error(`[심각] 저장 모듈 로드 실패:`, e);
+                    });
+                  }
+                }}
+                onError={() => {
+                  // 이미지 로드 실패
+                  logger.error(`[이미지] ID: ${post.id} 로드 실패`);
+                  imageStatusRef.current.error = true;
+                  failedImageIds.add(post.id);
+                }}
+              />
+            </div>
+          ) : (
+            <div 
+              className={`w-full bg-gray-100 flex items-center justify-center ${!isSignedIn ? 'blur-[2px]' : ''}`}
+              style={{ aspectRatio: '1/1' }} // 항상 1:1 비율로 표시
+            >
+              <div className="text-center p-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 mx-auto mb-2">
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                  <circle cx="9" cy="9" r="2"/>
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                </svg>
+                <p className="text-xs text-gray-400">이미지를 불러올 수 없습니다</p>
+              </div>
+            </div>
+          )}
           
           {/* 비로그인 시 오버레이 */}
           {!isSignedIn && (
@@ -292,9 +499,34 @@ export function ImageCard({
       
       {/* 카테고리 표시 섹션 - 원래 위치로 복원 */}
       <div className="px-5 py-3 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between border-b border-gray-100">
-        <span className={`px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center ${categoryColor}`}>
-          <span className="mr-1.5">{categoryEmoji}</span> {category}
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className={`px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center ${categoryColor}`}>
+            <span className="mr-1.5">{categoryEmoji}</span> {category}
+          </span>
+          
+          {/* 원본/공유 이미지 배지 추가 */}
+          {post.original_generation_id && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 shadow-sm flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                <polyline points="16 6 12 2 8 6"></polyline>
+                <line x1="12" y1="2" x2="12" y2="15"></line>
+              </svg>
+              공유됨
+            </span>
+          )}
+          
+          {post.isShared && !post.original_generation_id && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 shadow-sm flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              원본
+            </span>
+          )}
+        </div>
         <span className="text-gray-400 text-xs font-medium tracking-wide uppercase">{formatDate(post.createdAt)}</span>
       </div>
       
@@ -317,13 +549,11 @@ export function ImageCard({
         </div>
         
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => onShare(post)}
-            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-500 transition-colors p-2 rounded-full hover:bg-gray-50"
-            title="Share image"
-          >
-            <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
-          </button>
+          <div className="flex items-center justify-center rounded-full relative group/icon overflow-hidden shadow-glow">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-90 animate-gradient-xy rounded-full"></div>
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-white relative z-10 animate-spin-slow p-2" />
+            <span className="absolute -top-1 -right-1 h-2 w-2 bg-pink-500 rounded-full animate-ping opacity-75 z-20"></span>
+          </div>
           
           {post.userId === currentUser?.id && (
             <button 

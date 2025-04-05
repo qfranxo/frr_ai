@@ -2,14 +2,16 @@
 
 import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import Image from 'next/image'
-import { useUser } from '@clerk/nextjs'
+import { useUser, useAuth } from '@clerk/nextjs'
 import { CommentModal } from '@/components/shared/CommentModal'
 import { AuthCommentButton, AuthLikeButton } from '@/components/shared/AuthButtons'
-import { Share2, RefreshCw, Heart, MessageCircle } from 'lucide-react'
+import { Share2, RefreshCw, Heart, MessageCircle, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { IComment } from '@/types'
 import { formatDate } from '@/utils/format'
 import { communityApi } from '@/lib/api'
+import { auth } from '@clerk/nextjs/server'
+import { supabase } from '@/lib/supabase'
 
 // 토스트 중복 방지를 위한 전역 플래그
 let isToastInProgress = false;
@@ -27,6 +29,21 @@ interface Generation {
   likes?: number
   comments?: any[]
   author?: string
+  isShared?: boolean
+  storagePath?: string
+  original_generation_id?: string
+  cameraDistance?: string
+  eyeColor?: string
+  skinType?: string
+  hairStyle?: string
+  modelVersion?: string
+  background?: string
+  lighting?: string
+  facial_expression?: string
+  accessories?: string
+  makeup?: string
+  framing?: string
+  category?: string
 }
 
 export default function RecentImageCardsSuspenseWrapper() {
@@ -53,11 +70,43 @@ function RecentImageCardsContent() {
   const [commentsMap, setCommentsMap] = useState<Record<string, any[]>>({})
   const [refreshing, setRefreshing] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [authToken, setAuthToken] = useState<string | null>(null)
 
   const { user, isSignedIn } = useUser()
+  const { getToken } = useAuth()
   
   // 토스트 중복 방지용 ref
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // JWT 토큰 디버깅을 위한 useEffect
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        if (isSignedIn && user) {
+          const token = await getToken({ template: "frrai" });
+          setAuthToken(token);
+          
+          console.log("🧪 Clerk JWT Token:", token ? "토큰 취득 성공" : "토큰 없음");
+          console.log("🧪 Clerk 인증 상태:", isSignedIn ? "로그인됨" : "로그인 안됨");
+          if (user) {
+            console.log("🧪 Clerk 사용자 정보:", {
+              id: user.id,
+              name: user.fullName,
+              email: user.primaryEmailAddress?.emailAddress
+            });
+          }
+        } else {
+          setAuthToken(null);
+          console.log("🧪 로그인되지 않음 - 토큰을 가져올 수 없음");
+        }
+      } catch (error) {
+        console.error("🧪 Clerk JWT 토큰 취득 오류:", error);
+        setAuthToken(null);
+      }
+    };
+    
+    fetchToken();
+  }, [getToken, isSignedIn, user]);
   
   // 토스트 표시 함수
   const showToast = useCallback((type: 'success' | 'error', message: string) => {
@@ -121,6 +170,7 @@ function RecentImageCardsContent() {
   // 데이터 가져오기 함수 (로컬 스토리지에서 최신 이미지 불러오기)
   const fetchData = useCallback(async () => {
     try {
+      console.log('[RecentImages] 데이터 가져오기 시작');
       setRefreshing(true)
       
       // 로컬 스토리지에서 생성된 이미지 가져오기
@@ -135,6 +185,7 @@ function RecentImageCardsContent() {
             localImages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             // 최대 2개만 표시
             localImages = localImages.slice(0, 2)
+            console.log('[RecentImages] 로컬 이미지 로드:', localImages.length, '개');
           } catch (e) {
             console.error('Failed to parse stored images:', e)
           }
@@ -148,7 +199,66 @@ function RecentImageCardsContent() {
       localImages.forEach(item => {
         initialLikesMap[item.id] = item.likes || 0;
       });
+      
+      // 좋아요 정보 불러오기
+      if (localImages.length > 0) {
+        console.log('[RecentImages] 좋아요/댓글 정보 로드 시작');
+        
+        // 사용자 ID 확인
+        const userId = isSignedIn && user ? user.id : null;
+        console.log('[RecentImages] 현재 사용자 ID:', userId || '없음 (게스트)');
+        
+        try {
+          for (const image of localImages) {
+            console.log(`[RecentImages] 이미지 ID: ${image.id} 데이터 로드 중`);
+            
+            // 좋아요 정보 불러오기 - userId 파라미터 추가
+            const likesUrl = userId 
+              ? `/api/likes?imageId=${image.id}&userId=${userId}`
+              : `/api/likes?imageId=${image.id}`;
+            
+            const likesResponse = await fetch(likesUrl);
+            if (likesResponse.ok) {
+              const likesData = await likesResponse.json();
+              console.log(`[RecentImages] 좋아요 응답:`, likesData);
+              
+              if (likesData.success) {
+                // 좋아요 맵 업데이트
+                initialLikesMap[image.id] = likesData.count || 0;
+                if (isSignedIn && user) {
+                  setLikedPostsMap(prev => ({
+                    ...prev,
+                    [image.id]: likesData.isLiked || false
+                  }));
+                }
+              }
+            } else {
+              console.error(`[RecentImages] 좋아요 API 오류:`, likesResponse.status);
+            }
+            
+            // 댓글 정보도 불러오기
+            const commentsResponse = await fetch(`/api/comments?imageId=${image.id}`);
+            if (commentsResponse.ok) {
+              const commentsData = await commentsResponse.json();
+              console.log(`[RecentImages] 댓글 응답:`, commentsData.success, commentsData.data?.length || 0);
+              
+              if (commentsData.success) {
+                setCommentsMap(prev => ({
+                  ...prev,
+                  [image.id]: commentsData.data || []
+                }));
+              }
+            } else {
+              console.error(`[RecentImages] 댓글 API 오류:`, commentsResponse.status);
+            }
+          }
+        } catch (error) {
+          console.error('[RecentImages] 좋아요/댓글 정보 로드 오류:', error);
+        }
+      }
+      
       setLikesMap(initialLikesMap);
+      console.log('[RecentImages] 데이터 로드 완료', initialLikesMap);
     } catch (error) {
       console.error('Failed to load recent images:', error)
       setData([])
@@ -156,7 +266,7 @@ function RecentImageCardsContent() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [isSignedIn, user])
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -179,39 +289,76 @@ function RecentImageCardsContent() {
     }
   }, [fetchData])
 
-  // 좋아요 처리 함수
-  const handleLike = async (postId: string) => {
+  // 좋아요 토글 함수
+  const handleLike = async (post: { id: string }) => {
     if (isProcessing) return;
     
-    setIsProcessing(true);
     try {
-      // 현재 포스트 찾기
-      const currentPost = data.find(post => post.id === postId) || { likes: 0 };
+      setIsProcessing(true);
+      const postId = post.id;
       
-      // 현재 좋아요 상태 확인
-      const isCurrentlyLiked = likedPostsMap[postId] || false
-      const newLikedState = !isCurrentlyLiked
+      // 사용자가 로그인했는지 확인
+      if (!isSignedIn || !user) {
+        showToast('error', '좋아요를 표시하려면 로그인하세요');
+        setIsProcessing(false);
+        return;
+      }
       
-      // 즉시 UI 상태 업데이트 (낙관적 업데이트)
+      const userId = user.id;
+      const isCurrentlyLiked = likedPostsMap[postId] || false;
+      const currentLikes = likesMap[postId] || 0;
+      
+      // UI 상태 즉시 업데이트 (낙관적 업데이트)
       setLikedPostsMap(prev => ({
         ...prev,
-        [postId]: newLikedState
-      }))
+        [postId]: !isCurrentlyLiked
+      }));
       
       setLikesMap(prev => ({
         ...prev,
-        [postId]: (prev[postId] !== undefined ? prev[postId] : (currentPost.likes === undefined ? 0 : currentPost.likes)) + (newLikedState ? 1 : -1)
-      }))
+        [postId]: isCurrentlyLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1
+      }));
       
-      // 로컬 상태만 변경
-      showToast('success', newLikedState ? 'Liked!' : 'Like removed')
-    } catch (error) {
-      console.error('Error processing like:', error)
-      showToast('error', 'An error occurred during processing.')
-    } finally {
-      setTimeout(() => {
+      console.log(`[좋아요] 시작 - 포스트 ID: ${postId}, 사용자 ID: ${userId}, 현재 좋아요 상태: ${isCurrentlyLiked ? '좋아요 취소' : '좋아요 추가'}`);
+      
+      // API 호출 - 인증 토큰 대신 userId 직접 전달
+      const response = await fetch('/api/likes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          imageId: postId,
+          userId: userId,
+          isLiked: !isCurrentlyLiked,
+          increment: isCurrentlyLiked ? -1 : 1
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[좋아요] API 오류 (${response.status}):`, errorText);
+        showToast('error', `좋아요 처리 중 오류가 발생했습니다 (${response.status})`);
         setIsProcessing(false);
-      }, 500);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log("✅ 좋아요 응답:", result);
+      
+      if (!result.success) {
+        console.error('좋아요 API 오류:', result.message);
+        showToast('error', result.message || '좋아요 처리 중 오류가 발생했습니다.');
+        setIsProcessing(false);
+      } else {
+        console.log(`[좋아요] 성공 - 액션: ${result.action}`);
+        showToast('success', result.action === 'added' ? '좋아요가 추가되었습니다!' : '좋아요가 취소되었습니다!');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('좋아요 처리 중 오류:', error)
+      showToast('error', '처리 중 오류가 발생했습니다.')
+      setIsProcessing(false);
     }
   }
 
@@ -219,31 +366,107 @@ function RecentImageCardsContent() {
   const handleComment = async (postId: string, text: string) => {
     if (!text.trim() || isProcessing) return;
     
-    setIsProcessing(true);
     try {
-      // 가상의 댓글 추가
+      setIsProcessing(true);
+      
+      // 사용자가 로그인했는지 확인
+      if (!isSignedIn || !user) {
+        showToast('error', '댓글을 작성하려면 로그인하세요');
+        setIsProcessing(false);
+        return;
+      }
+      
+      const userId = user.id;
+      const userName = user.fullName || user.username || 'User';
+      const userAvatar = user.imageUrl;
+      
+      console.log(`[댓글] 시작 - 포스트 ID: ${postId}, 사용자 ID: ${userId}, 댓글: ${text}`);
+      
+      // 현재 댓글 목록
+      const currentComments = commentsMap[postId] || [];
+      
+      // 임시 댓글 ID 생성 (실제 저장 후 업데이트)
+      const tempCommentId = `temp-${Date.now()}`;
+      
+      // UI에 즉시 표시할 새 댓글 (낙관적 업데이트)
       const newComment = {
-        id: `comment-${Date.now()}`,
-        postId,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        text,
-        createdAt: new Date().toISOString()
+        id: tempCommentId,
+        userId: userId,
+        userName: userName,
+        userAvatar: userAvatar,
+        text: text,
+        createdAt: new Date().toISOString(),
+        isTemp: true // 임시 플래그
       };
       
+      // 댓글 상태 업데이트
       setCommentsMap(prev => ({
         ...prev,
-        [postId]: [...(prev[postId] || []), newComment]
-      }))
+        [postId]: [...currentComments, newComment]
+      }));
       
-      setCommentModalState({ isOpen: false, postId: '' })
-    } catch (error) {
-      console.error('Error adding comment:', error)
-      showToast('error', 'Failed to add comment.')
-    } finally {
-      setTimeout(() => {
+      // 저장된 JWT 토큰 사용
+      if (!authToken) {
+        console.error(`[댓글] JWT 토큰이 없습니다.`);
+        showToast('error', '인증에 실패했습니다. 다시 로그인해보세요.');
         setIsProcessing(false);
-      }, 500);
+        return;
+      }
+      
+      console.log(`[댓글] JWT 토큰 사용:`, authToken ? '성공' : '실패');
+      
+      // API 호출
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          imageId: postId,
+          userId: userId,
+          userName: userName,
+          userAvatar: userAvatar,
+          text: text
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[댓글] API 오류 (${response.status}):`, errorText);
+        showToast('error', `댓글 추가 중 오류가 발생했습니다 (${response.status})`);
+        setIsProcessing(false);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log(`[댓글] API 응답:`, result);
+      
+      if (!result.success) {
+        console.error('댓글 API 오류:', result.message);
+        showToast('error', result.message || '댓글 추가 중 오류가 발생했습니다.');
+        setIsProcessing(false);
+      } else {
+        console.log(`[댓글] 성공 - ID: ${result.data?.id}`);
+        showToast('success', '댓글이 추가되었습니다!');
+        
+        // 실제 댓글 ID로 업데이트
+        if (result.data?.id) {
+          setCommentsMap(prev => ({
+            ...prev,
+            [postId]: prev[postId].map(comment => 
+              comment.id === newComment.id 
+                ? { ...comment, id: result.data.id } 
+                : comment
+            )
+          }));
+        }
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('댓글 추가 중 오류:', error)
+      showToast('error', '댓글 추가에 실패했습니다.')
+      setIsProcessing(false);
     }
   }
 
@@ -251,20 +474,93 @@ function RecentImageCardsContent() {
   const handleDeleteComment = async (postId: string, commentId: string) => {
     if (isProcessing) return;
     
-    setIsProcessing(true);
     try {
-      // 로컬 상태만 변경
+      setIsProcessing(true);
+      
+      // 사용자가 로그인했는지 확인
+      if (!isSignedIn || !user) {
+        showToast('error', '작업을 수행하려면 로그인하세요');
+        setIsProcessing(false);
+        return;
+      }
+      
+      const userId = user.id;
+      
+      console.log(`[댓글 삭제] 시작 - 포스트 ID: ${postId}, 댓글 ID: ${commentId}, 사용자 ID: ${userId}`);
+      
+      // 현재 댓글 목록
+      const currentComments = commentsMap[postId] || [];
+      
+      // 삭제할 댓글 찾기
+      const commentToDelete = currentComments.find(comment => comment.id === commentId);
+      
+      if (!commentToDelete) {
+        console.error('댓글을 찾을 수 없습니다');
+        showToast('error', '댓글을 찾을 수 없습니다');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // 자신의 댓글인지 확인
+      if (commentToDelete.userId !== userId) {
+        showToast('error', '자신의 댓글만 삭제할 수 있습니다');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // UI에서 댓글 즉시 제거 (낙관적 업데이트)
       setCommentsMap(prev => ({
         ...prev,
-        [postId]: prev[postId].filter(comment => comment.id !== commentId)
-      }))
-    } catch (error) {
-      console.error('Error deleting comment:', error)
-      showToast('error', 'Failed to delete comment.')
-    } finally {
-      setTimeout(() => {
+        [postId]: currentComments.filter(c => c.id !== commentId)
+      }));
+      
+      // 저장된 JWT 토큰 사용
+      if (!authToken) {
+        console.error(`[댓글 삭제] JWT 토큰이 없습니다.`);
+        showToast('error', '인증에 실패했습니다. 다시 로그인해보세요.');
         setIsProcessing(false);
-      }, 500);
+        return;
+      }
+      
+      console.log(`[댓글 삭제] JWT 토큰 사용:`, authToken ? '성공' : '실패');
+      
+      // API 호출
+      const response = await fetch('/api/comments', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          commentId: commentId,
+          imageId: postId,
+          userId: userId
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[댓글 삭제] API 오류 (${response.status}):`, errorText);
+        showToast('error', `댓글 삭제 중 오류가 발생했습니다 (${response.status})`);
+        setIsProcessing(false);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log(`[댓글 삭제] API 응답:`, result);
+      
+      if (!result.success) {
+        console.error('댓글 삭제 API 오류:', result.message);
+        showToast('error', result.message || '댓글 삭제 중 오류가 발생했습니다.');
+        setIsProcessing(false);
+      } else {
+        showToast('success', '댓글이 삭제되었습니다!');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      console.error('댓글 삭제 중 오류:', error)
+      showToast('error', '처리 중 오류가 발생했습니다.')
+      setIsProcessing(false);
     }
   }
 
@@ -274,15 +570,228 @@ function RecentImageCardsContent() {
     
     setIsProcessing(true);
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/post/${postId}`)
-      showToast('success', 'Link copied to clipboard.')
+      // 공유할 포스트 찾기
+      const postToShare = data.find(item => item.id === postId);
+      if (!postToShare) {
+        throw new Error('Post not found');
+      }
+      
+      // localStorage에서 원본 데이터를 다시 한번 확인
+      let originalData = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const storedImages = localStorage.getItem('generatedImages');
+          if (storedImages) {
+            const parsedImages = JSON.parse(storedImages);
+            originalData = parsedImages.find((img: Generation) => img.id === postId);
+            
+            if (originalData) {
+              console.log("📊 로컬 스토리지에서 찾은 원본 데이터:", {
+                id: originalData.id,
+                aspectRatio: originalData.aspectRatio,
+                renderingStyle: originalData.renderingStyle,
+                category: originalData.category,
+                background: originalData.background
+              });
+            }
+          }
+        } catch (e) {
+          console.error('localStorage 데이터 검증 오류:', e);
+        }
+      }
+      
+      // 원본 데이터와 현재 데이터 병합 (원본 데이터가 있으면 우선 사용)
+      const mergedData = {
+        ...postToShare,
+        ...(originalData || {}),
+        id: postId // ID는 항상 유지
+      };
+      
+      // 상세 정보 로깅
+      console.log("📊 공유할 이미지 병합 상세 정보:", {
+        id: mergedData.id,
+        aspectRatio: mergedData.aspectRatio,
+        renderingStyle: mergedData.renderingStyle,
+        category: mergedData.category, 
+        background: mergedData.background,
+        gender: mergedData.gender,
+        age: mergedData.age
+      });
+      
+      const shareToast = toast.loading('Sharing to community...');
+      
+      // FormData를 사용한 API로 이미지 공유
+      const formData = new FormData();
+      
+      // 필수 필드는 항상 포함
+      formData.append("image_url", mergedData.imageUrl);
+      formData.append("prompt", mergedData.prompt);
+      
+      // 선택적 필드는 값이 있을 때만 포함
+      if (mergedData.renderingStyle) {
+        console.log("🔍 전송: rendering_style =", mergedData.renderingStyle);
+        formData.append("rendering_style", mergedData.renderingStyle);
+      }
+      
+      if (mergedData.gender) {
+        console.log("🔍 전송: gender =", mergedData.gender);
+        formData.append("gender", mergedData.gender);
+      }
+      
+      if (mergedData.age) {
+        console.log("🔍 전송: age =", mergedData.age);
+        formData.append("age", mergedData.age);
+      }
+      
+      // 중요: aspect_ratio 값 로깅 및 설정 (엄격하게 확인)
+      if (mergedData.aspectRatio && mergedData.aspectRatio !== '1:1') {
+        console.log("🔍 전송 (특별 확인): aspect_ratio =", mergedData.aspectRatio);
+        formData.append("aspect_ratio", mergedData.aspectRatio);
+      }
+      
+      // 카테고리 값 설정 (우선순위: 원본 category > 계산된 category)
+      let finalCategory = '';
+      if (mergedData.category && mergedData.category.trim() !== '') {
+        finalCategory = mergedData.category;
+      } else if (mergedData.renderingStyle) {
+        finalCategory = getCategoryFromStyle(mergedData.renderingStyle);
+      }
+      
+      if (finalCategory && finalCategory !== 'other') {
+        console.log("🔍 전송 (특별 확인): category =", finalCategory);
+        formData.append("category", finalCategory);
+      }
+      
+      // 원본 이미지 ID
+      formData.append("original_generation_id", mergedData.id);
+      
+      // 스토리지 경로
+      if (mergedData.storagePath) {
+        formData.append("storage_path", mergedData.storagePath);
+      }
+      
+      // 추가 필드들도 엄격하게 확인하여 추가
+      if (mergedData.background) {
+        console.log("🔍 전송 (특별 확인): background =", mergedData.background);
+        formData.append("background", mergedData.background);
+      }
+      
+      if (mergedData.cameraDistance) {
+        formData.append("camera_distance", mergedData.cameraDistance);
+      }
+      
+      if (mergedData.eyeColor) {
+        formData.append("eye_color", mergedData.eyeColor);
+      }
+      
+      if (mergedData.skinType) {
+        formData.append("skin_type", mergedData.skinType);
+      }
+      
+      if (mergedData.hairStyle) {
+        formData.append("hair_style", mergedData.hairStyle);
+      }
+      
+      if (mergedData.modelVersion) {
+        formData.append("model_version", mergedData.modelVersion);
+      }
+      
+      if (mergedData.lighting) {
+        formData.append("lighting", mergedData.lighting);
+      }
+      
+      if (mergedData.facial_expression) {
+        formData.append("facial_expression", mergedData.facial_expression);
+      }
+      
+      // 고정 필드
+      formData.append("source", "generated");
+      
+      // 사용자 이름 설정
+      if (user && isSignedIn) {
+        const userName = user.fullName || user.firstName || user.username || '';
+        console.log("👤 전송할 user_name 값:", userName);
+        formData.append("user_name", userName);
+      }
+      
+      // 디버깅: formData 내용 확인
+      console.log('🧾 formData entries 최종:');
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key} = ${value}`);
+      }
+      
+      const response = await fetch('/api/share', {
+        method: 'POST',
+        body: formData // Content-Type 자동 설정
+      });
+      
+      // 디버깅: 응답 상태 및 헤더 확인
+      console.log('📡 응답 상태:', response.status, response.statusText);
+      
+      const responseData = await response.json();
+      console.log('📡 응답 데이터:', responseData);
+      
+      toast.dismiss(shareToast);
+      
+      if (responseData.success) {
+        // 성공 메시지 표시
+        showToast('success', responseData.message || '이미지가 커뮤니티에 공유되었습니다.');
+        // shared 플래그 업데이트
+        updateSharedStatus(postId);
+      } else {
+        // 세부 오류 메시지 추출 및 표시
+        let errorMsg = responseData.error || '공유에 실패했습니다.';
+        
+        // DB 오류 메시지에서 컬럼 관련 오류 추출하여 사용자 친화적 메시지로 변환
+        if (errorMsg.includes('column') && errorMsg.includes('PGRST204')) {
+          const match = errorMsg.match(/Could not find the '(\w+)' column/);
+          if (match && match[1]) {
+            const missingColumn = match[1];
+            errorMsg = `데이터베이스에 '${missingColumn}' 필드가 없어 공유할 수 없습니다. 관리자에게 문의하세요.`;
+          } else {
+            errorMsg = '데이터베이스 스키마 문제로 공유할 수 없습니다. 관리자에게 문의하세요.';
+          }
+        }
+        
+        console.error("공유 실패:", responseData.error);
+        showToast('error', errorMsg);
+      }
     } catch (error) {
-      console.error('Error sharing:', error)
-      showToast('error', 'Failed to copy link.')
+      console.error('Error sharing:', error);
+      showToast('error', error instanceof Error ? error.message : '공유에 실패했습니다.');
     } finally {
       setTimeout(() => {
         setIsProcessing(false);
       }, 500);
+    }
+  }
+  
+  // 이미지가 공유되었음을 로컬 스토리지에 표시
+  const updateSharedStatus = (postId: string) => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedImages = localStorage.getItem('generatedImages');
+        if (storedImages) {
+          const images = JSON.parse(storedImages);
+          const updatedImages = images.map((img: Generation) => {
+            if (img.id === postId) {
+              return { ...img, isShared: true };
+            }
+            return img;
+          });
+          
+          localStorage.setItem('generatedImages', JSON.stringify(updatedImages));
+          
+          // 현재 상태 업데이트
+          setData(prevData => 
+            prevData.map(item => 
+              item.id === postId ? { ...item, isShared: true } : item
+            )
+          );
+        }
+      } catch (e) {
+        console.error('Failed to update shared status:', e);
+      }
     }
   }
 
@@ -414,8 +923,23 @@ function RecentImageCardsContent() {
                   loading="lazy"
                   placeholder="blur"
                   blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0iI2YxZjFmMSIvPjwvc3ZnPg=="
-                  priority={false}
+                  unoptimized={true}
+                  onError={() => {
+                    console.log(`[오류] ID: ${item.id} 이미지 로드 실패`);
+                  }}
                 />
+                
+                {/* 공유 상태 배지 */}
+                {item.isShared && (
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-blue-500/80 text-white text-xs font-medium shadow-md backdrop-blur-sm border border-blue-300/50 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    공유됨
+                  </div>
+                )}
               </div>
               
               {/* 카테고리와 날짜 정보 */}
@@ -432,7 +956,7 @@ function RecentImageCardsContent() {
                 <div className="flex justify-end items-center mb-2">
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => handleLike(item.id)}
+                      onClick={() => handleLike(item)}
                       className="p-1 text-gray-500 hover:text-red-500 transition-colors rounded-full group"
                     >
                       <Heart 
@@ -451,12 +975,11 @@ function RecentImageCardsContent() {
                     >
                       <MessageCircle size={14} className="transition-colors" />
                     </button>
-                    <button
-                      onClick={() => handleShare(item.id)}
-                      className="p-1 text-gray-500 hover:text-blue-500 transition-colors rounded-full group"
-                    >
-                      <Share2 size={14} className="transition-colors" />
-                    </button>
+                    <div className="rounded-full relative group/icon overflow-hidden shadow-glow">
+                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-90 animate-gradient-xy rounded-full"></div>
+                      <Sparkles size={14} className="text-white relative z-10 animate-spin-slow p-1" />
+                      <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 bg-pink-500 rounded-full animate-ping opacity-75 z-20"></span>
+                    </div>
                   </div>
                 </div>
                 

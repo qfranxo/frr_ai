@@ -1,10 +1,11 @@
 import { IResultCard } from '@/types';
-import { Download, Share2, Camera, Palette, Mountain, Building, Wand2, Rocket, Clock, Dribbble, PawPrint } from 'lucide-react';
+import { Download, Share2, Camera, Palette, Mountain, Building, Wand2, Rocket, Clock, Dribbble, PawPrint, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { formatDate } from '@/utils/format';
 import { useUser } from '@clerk/nextjs';
+import { downloadImage } from '@/utils/image-utils';
 
 // 스타일에 따른 카테고리 매핑 함수
 const getCategoryFromStyle = (style?: string): string => {
@@ -117,28 +118,16 @@ export const ResultCard = ({ image }: IResultCard) => {
   const isOwner = user?.id === image.userId;
 
   const handleDownload = async () => {
-    // 소유자가 아닌 경우 다운로드 제한
-    if (!isOwner) {
-      toast.error("Only the owner can download this image");
-      return;
-    }
-    
-    try {
-      const response = await fetch(image.imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `frr-ai-model-${image.id}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Image downloaded successfully.');
-    } catch (error) {
-      toast.error('Error occurred while downloading.');
-    }
+    // 유틸리티 함수 사용으로 중복 코드 제거
+    return downloadImage({
+      imageUrl: image.imageUrl,
+      fileName: `frr-ai-model-${image.id}`,
+      fileType: 'jpg',
+      isOwnerCheck: {
+        isOwner,
+        ownerErrorMessage: "Only the owner can download this image"
+      }
+    });
   };
 
   const handleShare = async () => {
@@ -167,7 +156,8 @@ export const ResultCard = ({ image }: IResultCard) => {
           gender: image.gender || '',
           age: image.age || '',
           aspectRatio: image.aspectRatio || '1:1',
-          selectedCategory: image.category || ''
+          selectedCategory: image.category || '',
+          generationId: image.id || null // 원본 이미지 ID 추가
         }),
       });
       
@@ -252,12 +242,12 @@ export const ResultCard = ({ image }: IResultCard) => {
             <span>Download</span>
           </button>
           
-          <button 
-            onClick={handleShare}
-            className="text-gray-500 hover:text-blue-500 transition-colors"
-          >
-            <Share2 className="h-5 w-5" />
-          </button>
+          {/* 트렌디한 애니메이션 아이콘 */}
+          <div className="relative rounded-full overflow-hidden shadow-glow">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-90 animate-gradient-xy rounded-full"></div>
+            <Sparkles className="h-5 w-5 text-white relative z-10 animate-spin-slow p-2" />
+            <span className="absolute -top-1 -right-1 h-2 w-2 bg-pink-500 rounded-full animate-ping opacity-75 z-20"></span>
+          </div>
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">

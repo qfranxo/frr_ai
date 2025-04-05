@@ -47,17 +47,18 @@ import {
   // --- Comments ---
   export const comments = pgTable('comments', {
     id: uuid('id').primaryKey().defaultRandom(),
-    postId: uuid('post_id').references(() => communityPosts.id),
-    userId: uuid('user_id').references(() => users.id),
+    imageId: uuid('image_id'),
+    userId: text('user_id'),
     content: text('content').notNull(),
+    userName: text('user_name'),
     createdAt: timestamp('created_at').defaultNow(),
   });
   
   // --- Likes ---
   export const likes = pgTable('likes', {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').references(() => users.id),
-    generationId: uuid('generation_id').references(() => generations.id),
+    userId: text('user_id'),
+    imageId: uuid('image_id'),
     createdAt: timestamp('created_at').defaultNow(),
   });
   

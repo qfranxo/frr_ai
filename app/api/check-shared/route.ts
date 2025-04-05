@@ -1,46 +1,47 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { generations } from '@/db/migrations/schema';
-import { eq } from 'drizzle-orm';
+import { supabase } from '@/lib/supabase';
 
-/**
- * 이미지가 이미 공유되었는지 확인하는 API
- * @param request 요청 객체 (body에 imageUrl이 포함됨)
- * @returns 이미 공유된 경우 exists: true, 그렇지 않으면 exists: false
- */
+// 간소화된 이미지 공유 확인 API
 export async function POST(request: Request) {
   try {
-    // 요청 본문 파싱
-    const { imageUrl } = await request.json();
+    // 요청 데이터 파싱
+    const data = await request.json();
+    const imageUrl = data.imageUrl || data.image_url;
     
     if (!imageUrl) {
-      return NextResponse.json(
-        { error: 'Image URL is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Image URL is required' 
+      }, { status: 400 });
     }
     
-    // 데이터베이스에서 이미지 검색
-    const existingImages = await db.select()
-      .from(generations)
-      .where(eq(generations.imageUrl, imageUrl))
+    // DB에서 이미지 URL로 검색
+    const { data: existingImages, error } = await supabase
+      .from('shared_images')
+      .select('id')
+      .eq('image_url', imageUrl)
       .limit(1);
     
-    const existingImage = existingImages.length > 0 ? existingImages[0] : null;
+    if (error) {
+      console.error('Database query error:', error);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Database error' 
+      }, { status: 500 });
+    }
     
     // 결과 반환
     return NextResponse.json({
-      exists: !!existingImage,
-      image: existingImage ? {
-        id: existingImage.id,
-        createdAt: existingImage.createdAt
-      } : null
+      success: true,
+      exists: existingImages && existingImages.length > 0,
+      imageId: existingImages && existingImages.length > 0 ? existingImages[0].id : null
     });
+    
   } catch (error) {
-    console.error('Error checking shared image:', error);
-    return NextResponse.json(
-      { error: 'Failed to check image status' },
-      { status: 500 }
-    );
+    console.error('Check shared API error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Server error' 
+    }, { status: 500 });
   }
 } 

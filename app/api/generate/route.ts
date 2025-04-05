@@ -7,7 +7,13 @@ import { modelStyleMapping } from "@/config/styleMapping";
 // app/api/generate/route.ts
 import { db, isDatabaseConnected } from '@/lib/db'
 import { generations } from '@/db/migrations/schema'
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
+import { v4 as uuidv4 } from "uuid";
+import { storeImageFromReplicate } from "@/utils/image-storage";
+import { formDataApi } from '@/lib/api';
+import Image from "next/image";
+import { supabase } from "@/lib/supabase";
+import { isReplicateUrl, isValidImageUrl } from "@/utils/image-utils";
 
 // 실제 Clerk의 auth 헬퍼 사용
 // function auth() {
@@ -20,6 +26,16 @@ import { currentUser } from '@clerk/nextjs/server';
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
+
+// UUID 유효성 검사 함수
+function isValidUUID(str: string | null | undefined) {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+// 개발 테스트용 ID 생성
+const testImageId = uuidv4(); // "550e8400-e29b-41d4-a716-446655440000" 형식
 
 export async function POST(request: Request) {
   // 디버깅을 위한 API 토큰 확인
@@ -38,10 +54,10 @@ export async function POST(request: Request) {
   let userName = "익명 사용자";
   
   // 로그인한 사용자인 경우에만 사용자 정보 가져오기
-  const user = await currentUser();
-  if (user) {
-    userId = user.id;
-    userName = user.firstName || user.username || '사용자';
+  const { userId: clerkUserId } = await auth();
+  if (clerkUserId) {
+    userId = clerkUserId;
+    userName = '사용자';
   }
 
   // DB 연결 상태 확인
@@ -54,7 +70,7 @@ export async function POST(request: Request) {
   let subscription = null;
 
   // 로그인한 사용자인 경우에만 사용량 제한 확인
-  if (dbConnected && user) {
+  if (dbConnected && clerkUserId) {
     try {
       const usageCheck = await canUserGenerate(userId);
       canGenerate = usageCheck.canGenerate;
@@ -185,80 +201,82 @@ export async function POST(request: Request) {
     // DB에 생성 기록 저장 (DB 연결이 있을 때만)
     if (result.status === "succeeded") {
       console.log("이미지가 성공적으로 생성되었습니다. 이미지 URL:", result.output);
+      
+      // 고유 ID 생성
+      const generationId = uuidv4();
+      
+      // 이미지 URL (Replicate의 출력)
+      const imageUrl = Array.isArray(result.output) && result.output.length > 0 
+        ? result.output[0] 
+        : (result.output || null); // null을 명시적으로 설정
+      
+      // 이미지 URL이 없으면 오류 반환
+      if (!isValidImageUrl(imageUrl)) {
+        return NextResponse.json(
+          { error: "이미지 생성 결과가 없습니다." },
+          { status: 500 }
+        );
+      }
+      
+      // Supabase Storage에 이미지 저장 (모든 경우 저장)
+      let storageUrl = imageUrl;
+      let storagePath = '';
+      
+      try {
+        // Replicate URL일 경우에만 저장 시도
+        if (isReplicateUrl(imageUrl)) {
+          console.log("Replicate 이미지를 Supabase Storage에 저장합니다:", imageUrl);
+          const storageResult = await storeImageFromReplicate(
+            imageUrl,
+            userId,
+            {
+              filename: `${generationId}.webp`,
+              folder: 'generations'
+            }
+          );
+          
+          storageUrl = storageResult.publicUrl;
+          storagePath = storageResult.storagePath;
+          console.log("이미지가 Supabase Storage에 저장되었습니다:", storageUrl);
+        } else {
+          console.log("Replicate URL이 아니므로 Storage 저장을 건너뜁니다:", imageUrl);
+        }
+      } catch (storageError) {
+        console.error("이미지 저장 중 오류 발생:", storageError);
+        console.warn("Supabase 저장에 실패하여 원본 URL을 사용합니다. 이 URL은 일시적일 수 있습니다.");
+        // 이미지 저장에 실패한 경우에만 원본 URL 사용
+      }
 
       // DB 저장 대신 생성 결과 반환 (클라이언트에서 로컬 스토리지에 저장)
       const generatedImage = {
-        id: `img_${Date.now()}`,
-        imageUrl: result.output,
+        id: generationId,
+        imageUrl: storageUrl, // Supabase Storage URL 사용 (저장 실패 시에만 원본 URL)
         prompt: prompt,
         aspectRatio: ratio,
         renderingStyle: renderStyle || style || 'standard',
         gender: gender || 'none',
         age: age || 'none',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        storagePath: storagePath, // 이미지 Storage 경로 저장
+        original_generation_id: isValidUUID(generationId) ? generationId : null,
       };
+      
+      // 사용량 증가 처리 (DB 연결이 있을 때만)
+      if (dbConnected && clerkUserId) {
+        try {
+          await incrementUserGenerations(userId);
+          console.log("사용량 증가 완료.");
+        } catch (usageError) {
+          console.error("사용량 업데이트 중 오류 발생:", usageError);
+          // 사용량 업데이트 실패해도 계속 진행
+        }
+      }
       
       // DB 연결 여부와 상관없이 이미지 생성 결과 반환
       return NextResponse.json({
         ...result,
         generatedImage
       });
-
-      // 아래 DB 관련 코드는 주석 처리
-      /* 
-      if (dbConnected) {
-        try {
-          // 사용량 증가 (DB 연결이 있을 때만)
-          await incrementUserGenerations(userId);
-          console.log("사용량 증가 완료.");
-          
-          // DB에 생성 기록 저장
-          try {
-            await db.insert(generations).values({
-              userId: userId,
-              userName: userName,
-              imageUrl: result.output,
-              prompt: prompt,
-              aspectRatio: ratio,
-              renderingStyle: renderStyle,
-              gender: gender,
-              age: age,
-              background: background,
-              skinType: skinType,
-              eyeColor: eyeColor,
-              hairStyle: hairStyle,
-              isShared: false,
-            });
-            console.log("DB에 생성 기록 저장 완료.");
-          } catch (dbError) {
-            console.error("DB에 생성 기록 저장 중 오류 발생:", dbError);
-            // DB 저장 실패해도 결과는 반환
-          }
-          
-          // 업데이트된 사용량 정보 가져오기
-          const updatedRemaining = remaining - 1;
-          subscription = await getUserSubscription(userId);
-          
-          return NextResponse.json({
-            ...result,
-            subscription: {
-              tier: subscription.tier,
-              maxGenerations: subscription.maxGenerations,
-              remaining: updatedRemaining,
-              renewalDate: subscription.renewalDate
-            }
-          });
-        } catch (usageError) {
-          console.error("사용량 업데이트 중 오류 발생:", usageError);
-          // 사용량 업데이트 실패해도 결과는 반환
-          return NextResponse.json(result);
-        }
-      } else {
-        // DB 연결이 없으면 결과만 반환
-        console.log("DB 연결이 없어 사용량 및 생성 기록 저장을 건너뜁니다.");
-        return NextResponse.json(result);
-      }
-      */
     }
 
     // 기본 응답
@@ -267,12 +285,22 @@ export async function POST(request: Request) {
     console.error("Error generating image:", error);
     
     // Replicate API 월별 지출 한도 오류 처리
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = {
+      type: typeof error,
+      isError: error instanceof Error,
+      name: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error || 'Unknown error'),
+      stack: error instanceof Error ? error.stack : undefined,
+      stringValue: typeof error?.toString === 'function' ? error.toString() : 'Cannot convert to string',
+      rawValue: error
+    };
+    
+    console.error('🔴 이미지 생성 중 오류:', errorDetails);
     
     if (
-      errorMessage.includes("Monthly spend limit reached") || 
-      errorMessage.includes("Payment Required") ||
-      errorMessage.includes("402")
+      errorDetails.message.includes("Monthly spend limit reached") || 
+      errorDetails.message.includes("Payment Required") ||
+      errorDetails.message.includes("402")
     ) {
       return NextResponse.json(
         { 
@@ -283,7 +311,7 @@ export async function POST(request: Request) {
     }
     
     return NextResponse.json(
-      { error: `이미지 생성 중 오류 발생: ${errorMessage}` },
+      { error: errorDetails.message },
       { status: 500 }
     );
   }

@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { SignUpButton } from "@clerk/nextjs";
+import { SignInButton } from "@clerk/nextjs";
 import dynamic from "next/dynamic";
 import { CheckCircle2, Clock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -209,11 +209,11 @@ export default function AboutPage() {
             </motion.div>
 
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full max-w-md">
-              <SignUpButton mode="modal">
+              <SignInButton mode="modal">
                 <Button className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                   Start Creating
                 </Button>
-              </SignUpButton>
+              </SignInButton>
               <Link href="/pricing" className="w-full">
                 <Button variant="outline" className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium border-2 border-gray-200 hover:border-purple-200 text-gray-700 hover:text-purple-700 rounded-xl hover:bg-purple-50/50 transition-all duration-300">
                   Explore Plans

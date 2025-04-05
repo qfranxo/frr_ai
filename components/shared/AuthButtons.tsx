@@ -32,7 +32,7 @@ export function AuthLikeButton({ isSignedIn, onLike, isLiked, likesCount = 0, ic
         <span className={`text-xs sm:text-sm font-medium transition-colors ${
           isLiked ? "text-red-500 group-hover:text-red-600" : "text-red-500 group-hover:text-red-600"
         }`}>
-          {likesCount > 0 ? likesCount : ""}
+          {likesCount}
         </span>
       </button>
     );
@@ -46,7 +46,7 @@ export function AuthLikeButton({ isSignedIn, onLike, isLiked, likesCount = 0, ic
       >
         <Heart className={iconClassName} />
         <span className="text-xs sm:text-sm font-medium">
-          {likesCount > 0 ? likesCount : ""}
+          {likesCount}
         </span>
       </button>
     </SignInButton>
@@ -73,11 +73,9 @@ export function AuthCommentButton({ isSignedIn, onComment, commentsCount = 0, la
       >
         <div className="relative">
           <MessageCircle className={iconClassName} />
-          {commentsCount > 0 && (
-            <span className="absolute -top-1 -right-1.5 bg-blue-500 text-white text-xs min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 font-medium">
-              {commentsCount > 99 ? '99+' : commentsCount}
-            </span>
-          )}
+          <span className="absolute -top-1 -right-1.5 bg-blue-500 text-white text-xs min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 font-medium">
+            {commentsCount > 99 ? '99+' : commentsCount}
+          </span>
         </div>
         {label && <span className="text-xs sm:text-sm font-medium">{label}</span>}
       </button>
@@ -92,11 +90,9 @@ export function AuthCommentButton({ isSignedIn, onComment, commentsCount = 0, la
       >
         <div className="relative">
           <MessageCircle className={iconClassName} />
-          {commentsCount > 0 && (
-            <span className="absolute -top-1 -right-1.5 bg-blue-500 text-white text-xs min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 font-medium">
-              {commentsCount > 99 ? '99+' : commentsCount}
-            </span>
-          )}
+          <span className="absolute -top-1 -right-1.5 bg-blue-500 text-white text-xs min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 font-medium">
+            {commentsCount > 99 ? '99+' : commentsCount}
+          </span>
         </div>
         {label && <span className="text-xs sm:text-sm font-medium">{label}</span>}
       </button>

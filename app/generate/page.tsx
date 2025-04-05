@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { IMAGE_GENERATION_CONFIG } from '@/config/imageGeneration';
 import { modelStyleMapping } from "@/config/styleMapping";
 import { sql } from 'drizzle-orm';
+import { isReplicateUrl, isValidImageUrl } from "@/utils/image-utils";
 
 // 구독 정보 인터페이스
 interface SubscriptionInfo {
@@ -36,6 +37,8 @@ interface GeneratedImage {
   cameraDistance: string;
   isShared?: boolean; // 공유 완료 상태 추가
   isSharing?: boolean; // 공유 진행 중 상태 추가
+  storagePath?: string; // 추가된 스토리지 경로 추가
+  aspectRatio?: string; // 추가: 비율의 다른 이름
 }
 
 // 공통 스타일 정의
@@ -178,6 +181,14 @@ const SubscriptionStatus = ({ subscription }: SubscriptionStatusProps) => {
   );
 };
 
+// 로딩 인터벌 또는 애니메이션 프레임 참조를 위한 타입 정의
+interface AnimationRef {
+  clear: () => void;
+}
+
+// 애니메이션 상태를 위한 타입
+type AnimationState = number | NodeJS.Timeout | AnimationRef | null;
+
 // 실제 Generate 컴포넌트 (useSearchParams 사용)
 function GenerateContent() {
   const searchParams = useSearchParams();
@@ -199,7 +210,7 @@ function GenerateContent() {
   const [selectedCameraDistance, setSelectedCameraDistance] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
-  const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingIntervalRef = useRef<AnimationState>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const [results, setResults] = useState<GeneratedImage[]>([]);
   const [isScrolling, setIsScrolling] = useState(false);
@@ -323,51 +334,123 @@ function GenerateContent() {
 
   // 로딩 진행률 업데이트 함수
   const startLoadingProgress = () => {
-    // 진행 상태 초기화
     setLoadingProgress(0);
     setLoadingMessage("Analyzing your prompt...");
     setShowLoadingModal(true);
     
-    // 이전 인터벌 클리어
+    // 이전 애니메이션 정리
     if (loadingIntervalRef.current) {
-      clearInterval(loadingIntervalRef.current);
+      if (typeof loadingIntervalRef.current === 'object' && 'clear' in loadingIntervalRef.current) {
+        (loadingIntervalRef.current as AnimationRef).clear();
+      } else if (typeof loadingIntervalRef.current === 'number') {
+        cancelAnimationFrame(loadingIntervalRef.current);
+      } else {
+        clearInterval(loadingIntervalRef.current as NodeJS.Timeout);
+      }
     }
     
-    // 0-70%까지 빠르게 (30ms 간격)
-    loadingIntervalRef.current = setInterval(() => {
-      setLoadingProgress(prev => {
-        if (prev >= 70) {
-          clearInterval(loadingIntervalRef.current!);
-          
-          setLoadingMessage("Generating model features...");
-          
-          // 70-100%까지 천천히 (150ms 간격)
-          loadingIntervalRef.current = setInterval(() => {
-            setLoadingProgress(prev => {
-              if (prev >= 90) {
-                setLoadingMessage("Refining details...");
-              }
-              
-              if (prev >= 99) {
-                clearInterval(loadingIntervalRef.current!);
-                return 99; // 99%에서 멈추고 실제 완료 시 100%로 설정
-              }
-              return prev + 0.5;
-            });
-          }, 150);
-          
-          return 70;
+    // 애니메이션 프레임 요청 ID를 저장할 변수
+    let requestId: number;
+    let lastTimestamp = performance.now();
+    let currentProgress = 0;
+    
+    // 빠른 단계(0-70%)와 느린 단계(70-99%)에 대한 증가율 설정
+    const fastIncrement = 2; // 빠른 단계 증가량
+    const slowIncrement = 0.5; // 느린 단계 증가량
+    
+    // requestAnimationFrame을 사용한 더 효율적인 진행 업데이트
+    const updateProgress = (timestamp: number) => {
+      // 타임스탬프 간 경과 시간(ms) 계산
+      const elapsed = timestamp - lastTimestamp;
+      
+      // 진행 단계에 따른 업데이트 간격과 증가량 조정
+      let shouldUpdate = false;
+      let increment = 0;
+      
+      if (currentProgress < 70) {
+        // 빠른 단계 (0-70%)
+        if (elapsed >= 30) { // 30ms마다 업데이트
+          shouldUpdate = true;
+          increment = fastIncrement;
+          lastTimestamp = timestamp;
         }
-        return prev + 2;
-      });
-    }, 30);
+      } else if (currentProgress < 90) {
+        // 중간 단계 (70-90%)
+        if (elapsed >= 150) { // 150ms마다 업데이트
+          shouldUpdate = true;
+          increment = slowIncrement;
+          lastTimestamp = timestamp;
+          
+          // 70% 지점에서 메시지 업데이트
+          if (currentProgress === 70) {
+            setLoadingMessage("Generating model features...");
+          }
+        }
+      } else if (currentProgress < 99) {
+        // 느린 단계 (90-99%)
+        if (elapsed >= 200) { // 200ms마다 업데이트
+          shouldUpdate = true;
+          increment = slowIncrement;
+          lastTimestamp = timestamp;
+          
+          // 90% 지점에서 메시지 업데이트
+          if (currentProgress === 90) {
+            setLoadingMessage("Refining details...");
+          }
+        }
+      }
+      
+      // 진행률 업데이트가 필요한 경우 업데이트
+      if (shouldUpdate) {
+        currentProgress += increment;
+        
+        // 99%를 넘지 않도록 제한
+        if (currentProgress >= 99) {
+          currentProgress = 99;
+          // 애니메이션 중지 (더 이상 프레임 요청하지 않음)
+          return;
+        }
+        
+        // 상태 업데이트 (리액트 상태)
+        setLoadingProgress(currentProgress);
+      }
+      
+      // 다음 프레임 요청
+      requestId = requestAnimationFrame(updateProgress);
+    };
+    
+    // 첫 프레임 요청 시작
+    requestId = requestAnimationFrame(updateProgress);
+    
+    // 정리 함수를 저장
+    const animationRef: AnimationRef = {
+      clear: () => {
+        if (requestId) {
+          cancelAnimationFrame(requestId);
+        }
+      }
+    };
+    
+    // 참조에 저장
+    loadingIntervalRef.current = animationRef;
   };
 
   // 로딩 완료 처리
   const completeLoading = () => {
     if (loadingIntervalRef.current) {
-      clearInterval(loadingIntervalRef.current);
+      // 애니메이션 프레임 정리 (객체인 경우)
+      if (typeof loadingIntervalRef.current === 'object' && 'clear' in loadingIntervalRef.current) {
+        (loadingIntervalRef.current as AnimationRef).clear();
+      } else if (typeof loadingIntervalRef.current === 'number') {
+        // requestAnimationFrame ID 정리 (숫자 ID인 경우)
+        cancelAnimationFrame(loadingIntervalRef.current);
+      } else {
+        // setInterval 정리 (NodeJS.Timeout인 경우)
+        clearInterval(loadingIntervalRef.current as NodeJS.Timeout);
+      }
+      loadingIntervalRef.current = null;
     }
+    
     setLoadingProgress(100);
     setLoadingMessage("Complete!");
     
@@ -873,7 +956,9 @@ function GenerateContent() {
           gender: selectedGender,
           age: selectedAge,
           ratio: selectedRatio,
-          cameraDistance: selectedCameraDistance || "medium"
+          cameraDistance: selectedCameraDistance || "medium",
+          storagePath: result.storagePath || '',
+          aspectRatio: result.aspectRatio || '1:1'
         };
         
         // 히스토리에 저장
@@ -914,11 +999,17 @@ function GenerateContent() {
     }
   };
 
-  // 공유 핸들러 수정
+  // 공유 핸들러 개선
   const handleShare = async (result: GeneratedImage, index: number) => {
     try {
       // 이미 공유 중이거나 공유된 이미지는 처리하지 않음
       if (result.isShared || result.isSharing) {
+        return;
+      }
+      
+      // 유효한 이미지 URL 확인
+      if (!isValidImageUrl(result.imageUrl)) {
+        toast.error('유효하지 않은 이미지 URL입니다.');
         return;
       }
       
@@ -927,85 +1018,26 @@ function GenerateContent() {
       updatedResults[index] = { ...updatedResults[index], isSharing: true };
       setResults(updatedResults);
       
-      console.log("handleShare called with result:", {
-        id: result.id,
-        imageUrl: result.imageUrl ? "URL exists" : "Missing URL",
-        prompt: result.prompt,
-        style: result.style,
-        renderingStyle: result.renderingStyle || selectedRenderStyle
-      });
+      // 로딩 토스트 표시
+      const loadingToast = toast.loading('이미지를 공유하는 중...');
       
-      // 프롬프트 기반 카테고리 감지
-      let detectedCategory = '';
-      const promptLower = result.prompt.toLowerCase();
-      
-      // 카테고리 감지 로직
-      if (promptLower.includes('sci-fi') || promptLower.includes('future') || promptLower.includes('space') || 
-          promptLower.includes('futuristic') || promptLower.includes('cyber')) {
-        detectedCategory = 'sci-fi';
-      } else if (promptLower.includes('vintage') || promptLower.includes('retro') || promptLower.includes('old')) {
-        detectedCategory = 'vintage';
-      } else if (promptLower.includes('anime') || promptLower.includes('cartoon') || result.renderingStyle === 'anime') {
-        detectedCategory = 'anime';
-      } else if (promptLower.includes('portrait') || promptLower.includes('face') || promptLower.includes('person')) {
-        detectedCategory = 'portrait';
-      } else if (promptLower.includes('landscape') || promptLower.includes('nature') || promptLower.includes('scenery')) {
-        detectedCategory = 'landscape';
-      } else if (promptLower.includes('fantasy') || promptLower.includes('magical')) {
-        detectedCategory = 'fantasy';
-      } else if (promptLower.includes('city') || promptLower.includes('urban') || promptLower.includes('architecture')) {
-        detectedCategory = 'urban';
-      } else if (promptLower.includes('animal') || promptLower.includes('wildlife') || promptLower.includes('pet')) {
-        detectedCategory = 'animals';
-      } else if (promptLower.includes('abstract') || promptLower.includes('conceptual')) {
-        detectedCategory = 'abstract';
-      }
-      
-      console.log("Detected category from prompt:", detectedCategory);
-      
-      // 공유 관련 메시지 영어로 변경
-      const loadingToast = toast.loading('Sharing to community...');
-      
-      // 이미 공유된 이미지인지 확인을 위한 호출
-      console.log("Checking if image is already shared...");
-      const checkResponse = await fetch('/api/check-shared', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: result.imageUrl
-        }),
-      });
-      
-      const checkResult = await checkResponse.json();
-      console.log("Check shared result:", checkResult);
-      
-      // 이미 공유된 이미지인 경우 메시지 표시
-      if (checkResult.exists) {
-        toast.dismiss(loadingToast);
-        toast.info('This image has already been shared to the community.');
-        
-        // 공유됨 상태로 업데이트
-        const newResults = [...results];
-        newResults[index] = { ...newResults[index], isShared: true, isSharing: false };
-        setResults(newResults);
-        return;
+      // Replicate URL 경고 표시 (개발 환경에서만)
+      if (process.env.NODE_ENV === 'development' && isReplicateUrl(result.imageUrl)) {
+        console.warn('Replicate URL은 일시적이며 곧 만료됩니다. API에서 자동으로 Supabase Storage에 저장합니다.');
       }
       
       // 공유 API 요청 데이터 준비
       const shareData = {
-        imageUrl: result.imageUrl,
+        image_url: result.imageUrl,
         prompt: result.prompt,
-        renderingStyle: result.renderingStyle || selectedRenderStyle,
-        gender: result.gender,
-        age: result.age,
-        aspectRatio: result.ratio,
-        userId: user?.id || 'user_1234567890',
-        selectedCategory: detectedCategory, // 감지된 카테고리 전달
-        generationId: result.id // 원본 이미지 ID 추가
+        rendering_style: result.renderingStyle || selectedRenderStyle,
+        aspect_ratio: result.aspectRatio || result.ratio || '1:1', // aspectRatio 또는 ratio 사용
+        gender: result.gender || '',
+        age: result.age || '',
+        storage_path: result.storagePath || ''
       };
-      console.log("Sharing image with data:", shareData);
+      
+      console.log('공유 데이터:', shareData);
       
       // 공유 API 호출
       const response = await fetch('/api/share', {
@@ -1016,92 +1048,130 @@ function GenerateContent() {
         body: JSON.stringify(shareData),
       });
       
-      const data = await response.json();
-      console.log("Share API response:", data);
+      // 응답 처리 강화
+      let data: { success: boolean; data?: any; error?: string } = { success: false };
+      let isJsonResponse = false;
       
-      // 로딩 토스트 닫기
-      toast.dismiss(loadingToast);
-      
-      if (data.success) {
-        // 공유 성공 - 상태 업데이트
-        const newResults = [...results];
-        newResults[index] = { ...newResults[index], isShared: true, isSharing: false };
-        setResults(newResults);
+      try {
+        // 응답이 JSON인지 확인
+        const contentType = response.headers.get('content-type');
+        isJsonResponse = contentType !== null && contentType.includes('application/json');
         
-        // 히스토리도 업데이트
-        if (history.length > 0) {
-          const historyIndex = history.findIndex(item => item.id === result.id);
-          if (historyIndex !== -1) {
-            const newHistory = [...history];
-            newHistory[historyIndex] = { ...newHistory[historyIndex], isShared: true };
-            setHistory(newHistory);
-            
-            // localStorage 업데이트
-            try {
-              localStorage.setItem('generationHistory', JSON.stringify(newHistory));
-            } catch (error) {
-              console.error('히스토리 저장 오류:', error);
-            }
+        if (isJsonResponse) {
+          data = await response.json();
+        } else {
+          // JSON이 아닌 경우 텍스트로 읽기
+          const textResponse = await response.text();
+          console.error('API가 JSON이 아닌 응답을 반환했습니다:', textResponse);
+          
+          // 텍스트 응답을 JSON으로 변환 시도
+          try {
+            data = JSON.parse(textResponse);
+            isJsonResponse = true;
+          } catch (parseError) {
+            // JSON 파싱 실패 - 오류 응답 생성
+            data = { 
+              success: false, 
+              error: `서버 응답이 유효한 JSON이 아닙니다: ${textResponse.substring(0, 100)}${textResponse.length > 100 ? '...' : ''}`
+            };
           }
         }
-        
+      } catch (responseError) {
+        console.error('응답 처리 오류:', responseError);
+        data = { 
+          success: false, 
+          error: responseError instanceof Error ? responseError.message : '응답 처리 중 오류가 발생했습니다.'
+        };
+      }
+      
+      toast.dismiss(loadingToast);
+      
+      // 상태 업데이트
+      const newResults = [...results];
+      
+      if (data.success) {
         // 공유 성공
-        toast.success('Shared to community successfully!', {
-          position: 'top-center'
-        });
+        newResults[index] = { 
+          ...newResults[index], 
+          isShared: true, 
+          isSharing: false,
+          // API 응답에서 반환된 영구 URL로 업데이트 (있는 경우)
+          imageUrl: data.data?.image_url || newResults[index].imageUrl
+        };
+        setResults(newResults);
         
-        // 커뮤니티 페이지로 이동 (약간 지연)
+        toast.success('커뮤니티에 공유되었습니다!');
+        
+        // 커뮤니티 페이지로 이동
         setTimeout(() => {
           router.push('/community');
         }, 1000);
       } else {
-        // 공유 실패 - 공유 상태 초기화
-        const newResults = [...results];
+        // 공유 실패
         newResults[index] = { ...newResults[index], isSharing: false };
         setResults(newResults);
         
-        // 공유 실패
-        console.error("Share failed:", data.error, data.details);
-        toast.error(data.error || 'Sharing failed.', {
-          position: 'top-center'
-        });
+        // 오류 메시지 추출 및 표시
+        const errorMessage = data.error || 
+          (response.ok ? '알 수 없는 오류' : `서버 오류 (${response.status})`);
+        
+        console.error("공유 실패:", errorMessage);
+        toast.error(`이미지 공유 실패: ${errorMessage}`);
       }
     } catch (error) {
-      // 에러 시 공유 상태 초기화
-      const newResults = [...results];
-      const updatedResult = { ...newResults[index], isSharing: false };
-      newResults[index] = updatedResult;
-      setResults(newResults);
-      
       // 에러 처리
-      console.error('Share error details:', error instanceof Error ? {
-        message: error.message,
-        stack: error.stack
-      } : String(error));
+      console.error('공유 중 오류 발생:', error);
+      toast.error(`이미지 공유 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
       
-      toast.error('An error occurred while sharing.', {
-        position: 'top-center'
-      });
+      // 상태 초기화
+      const newResults = [...results];
+      const indexToUpdate = Math.min(index, newResults.length - 1);
+      
+      if (indexToUpdate >= 0) {
+        newResults[indexToUpdate] = { ...newResults[indexToUpdate], isSharing: false };
+        setResults(newResults);
+      }
     }
   };
 
-  // 다운로드 함수 추가
+  // 다운로드 함수 개선
   const handleDownload = async (imageUrl: string) => {
     try {
+      // 유효한 이미지 URL 확인
+      if (!isValidImageUrl(imageUrl)) {
+        toast.error('유효하지 않은 이미지 URL입니다.');
+        return;
+      }
+      
+      const loadingToast = toast.loading('이미지를 다운로드하는 중...');
+      
+      // Replicate URL 경고 표시 (개발 환경에서만)
+      if (process.env.NODE_ENV === 'development' && isReplicateUrl(imageUrl)) {
+        console.warn('Replicate URL은 일시적이며 곧 만료됩니다. 이미지가 다운로드되지 않을 수 있습니다.');
+      }
+      
       const response = await fetch(imageUrl);
+      
+      if (!response.ok) {
+        throw new Error(`이미지 다운로드 실패: ${response.status} ${response.statusText}`);
+      }
+      
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `AI_model_${Date.now()}.jpg`; // 파일명 설정
+      a.download = `AI_model_${Date.now()}.webp`; // webp 형식으로 변경
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success('Image saved successfully!');
+      
+      toast.dismiss(loadingToast);
+      toast.success('이미지가 성공적으로 저장되었습니다!');
     } catch (error) {
-      console.error('Download error:', error);
-      toast.error('Failed to save the image.');
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      console.error('다운로드 오류:', errorMessage);
+      toast.error(`이미지 저장 실패: ${errorMessage}`);
     }
   };
 
@@ -1499,6 +1569,14 @@ function GenerateContent() {
     );
   };
 
+  // 이미지 URL이 없을 때 fallback 이미지 URL 사용
+  const getFallbackImageUrl = (imageUrl: string | null | undefined): string => {
+    if (!imageUrl || imageUrl.trim() === '') {
+      return '/fallback-image.png';
+    }
+    return imageUrl;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
       {/* 배경 효과 */}
@@ -1676,8 +1754,8 @@ function GenerateContent() {
                       }
                     }}
                     placeholder="Describe the advertising model you want in detail..."
-                    className="block w-full min-h-[80px] md:min-h-[120px] p-3 md:p-6 rounded-t-2xl border-none focus:ring-0 transition-all resize-none bg-transparent text-gray-800 placeholder:text-gray-400 text-sm md:text-lg whitespace-pre-wrap break-words leading-relaxed max-w-prose"
-                    style={{ lineHeight: '1.6', letterSpacing: '0.01em', columnWidth: 'auto' }}
+                    className="block w-full min-h-[80px] md:min-h-[120px] p-3 md:p-6 rounded-t-2xl border-none focus:ring-0 transition-all resize-none bg-transparent text-gray-800 placeholder:text-gray-400 text-sm md:text-lg whitespace-pre-wrap break-words leading-relaxed"
+                    style={{ lineHeight: '1.6', letterSpacing: '0.01em' }}
                     maxLength={200}
                   />
                   
@@ -1789,22 +1867,20 @@ function GenerateContent() {
                   <div className="px-4 md:px-6 pt-4 md:pt-6">
                     <div className="flex justify-center">
                       <div className={`relative w-full max-w-sm overflow-hidden rounded-xl md:rounded-2xl ${
-                        results && results.length > 0 && results[0]?.ratio
-                          ? results[0].ratio === "16:9" 
-                            ? "aspect-video" 
-                            : results[0].ratio === "9:16" 
-                              ? "aspect-[9/16]" 
-                              : "aspect-square"
-                          : "aspect-square"
+                        results[0]?.ratio === "16:9" 
+                          ? "aspect-video" 
+                          : results[0]?.ratio === "9:16" 
+                            ? "aspect-[9/16]" 
+                            : "aspect-square"
                       }`}>
-                        {results && results.length > 0 && results[0]?.imageUrl && (
+                        {results[0]?.imageUrl ? (
                           <>
                             <Image
-                              src={results[0].imageUrl}
+                              src={getFallbackImageUrl(results[0].imageUrl)}
                               alt={results[0].prompt || "Generated image"}
                               fill
                               className={`${
-                                results[0].ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
+                                results[0]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
                               }`}
                               sizes="(max-width: 768px) 100vw, 50vw"
                               priority
@@ -1813,6 +1889,17 @@ function GenerateContent() {
                               {results[0].ratio}
                             </div>
                           </>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <div className="text-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 mx-auto mb-2">
+                                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                <circle cx="9" cy="9" r="2"/>
+                                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                              </svg>
+                              <p className="text-xs text-gray-400">이미지를 불러올 수 없습니다</p>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1863,7 +1950,7 @@ function GenerateContent() {
                     </button>
                     
                     <button
-                      onClick={() => results && results.length > 0 && results[0]?.imageUrl ? handleDownload(results[0].imageUrl) : null}
+                      onClick={() => results && results.length > 0 && results[0]?.imageUrl ? handleDownload(getFallbackImageUrl(results[0].imageUrl)) : null}
                       className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors touch-manipulation border border-blue-100"
                       disabled={!results || results.length === 0 || !results[0]?.imageUrl}
                     >
@@ -1901,19 +1988,34 @@ function GenerateContent() {
                               ? "aspect-[9/16]" 
                               : "aspect-square"
                         }`}>
-                          <Image
-                            src={results[1].imageUrl}
-                            alt={results[1].prompt || "Generated image"}
-                            fill
-                            className={`${
-                              results[1]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
-                            }`}
-                            sizes="(max-width: 768px) 100vw, 50vw"
-                            priority
-                          />
-                          <div className="absolute bottom-2 right-2 bg-white/80 backdrop-blur-sm text-gray-800 text-xs px-2 py-1 rounded-full shadow-sm border border-gray-200">
-                            {results[1].ratio}
-                          </div>
+                          {results[1]?.imageUrl ? (
+                            <>
+                              <Image
+                                src={getFallbackImageUrl(results[1].imageUrl)}
+                                alt={results[1].prompt || "Generated image"}
+                                fill
+                                className={`${
+                                  results[1]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
+                                }`}
+                                sizes="(max-width: 768px) 100vw, 50vw"
+                                priority
+                              />
+                              <div className="absolute bottom-2 right-2 bg-white/80 backdrop-blur-sm text-gray-800 text-xs px-2 py-1 rounded-full shadow-sm border border-gray-200">
+                                {results[1].ratio}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <div className="text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 mx-auto mb-2">
+                                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                  <circle cx="9" cy="9" r="2"/>
+                                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                </svg>
+                                <p className="text-xs text-gray-400">이미지를 불러올 수 없습니다</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1963,8 +2065,9 @@ function GenerateContent() {
                       </button>
                       
                       <button
-                        onClick={() => handleDownload(results[1]?.imageUrl)}
+                        onClick={() => results[1]?.imageUrl ? handleDownload(getFallbackImageUrl(results[1].imageUrl)) : null}
                         className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors touch-manipulation border border-blue-100"
+                        disabled={!results[1]?.imageUrl}
                       >
                         <Download className="w-4 h-4" />
                         <span className="text-sm font-medium">Save Image</span>

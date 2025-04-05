@@ -83,12 +83,12 @@ export const CommunitySection = ({
                   onComment={(postId, text) => text ? onComment(postId, text) : null}
                   onDeleteComment={(postId, commentId) => onDeleteComment(postId, commentId)}
                   onDeletePost={onDeletePost ? (postId) => onDeletePost(postId) : undefined}
-                  onShare={handleShare ? () => handleShare(post) : () => {}}
-                  onDownload={handleDownload ? () => handleDownload(post) : () => {}}
+                  onShare={() => handleShare ? handleShare(post) : {}}
+                  onDownload={() => handleDownload ? handleDownload(post) : {}}
                   isLiked={likedPosts[index] || false}
                   likesCount={likes[index] || post.likes}
-                  commentsCount={post.comments?.length || 0}
-                  comments={comments[index] || []}
+                  commentsCount={comments[index]?.length || post.comments?.length || 0}
+                  comments={comments[index] || post.comments || []}
                   currentUser={currentUser}
                   isSignedIn={isSignedIn}
                 />

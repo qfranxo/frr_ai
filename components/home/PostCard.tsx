@@ -407,16 +407,12 @@ export const PostCard = ({
             <Download size={18} className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           
-          {/* 공유 버튼 */}
-          <button 
-            className="p-1.5 sm:p-2 rounded-full text-gray-500 hover:text-blue-500 hover:bg-blue-50 transition-all"
-            onClick={() => {
-              if (handleShare) handleShare();
-              toast.success('Link copied to clipboard');
-            }}
-          >
-            <Share2 size={18} className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+          {/* 트렌디한 애니메이션 아이콘 */}
+          <div className="rounded-full relative group/icon overflow-hidden shadow-glow">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-90 animate-gradient-xy rounded-full"></div>
+            <Sparkles size={18} className="w-4 h-4 sm:w-5 sm:h-5 text-white relative z-10 animate-spin-slow p-2" />
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-pink-500 rounded-full animate-ping opacity-75 z-20"></span>
+          </div>
         </div>
       </div>
 

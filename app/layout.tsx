@@ -1,14 +1,14 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import Header from "@/components/layout/Header";
 import { Toaster } from 'sonner';
-import GeistWrapper from "@/components/providers/GeistProvider";
 import Script from "next/script";
+import { Metadata } from "next";
+import ClientLayout from "./ClientLayout";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Frr AI",
   description: "AI 모델로 나를 만들어보세요",
 };
@@ -19,15 +19,19 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        elements: {
+          footerAction: {
+            display: "none"
+          }
+        }
+      }}
+    >
       <html lang="ko" suppressHydrationWarning>
         <body className={inter.className}>
-          <GeistWrapper>
-            <Header />
-            <main className="flex-grow">
-              {children}
-            </main>
-          </GeistWrapper>
+          <ClientLayout>{children}</ClientLayout>
+          
           <Toaster 
             position="top-center"
             toastOptions={{
