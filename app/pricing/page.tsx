@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import dynamic from 'next/dynamic';
 import { CheckCircle2, Sparkles, Clock, Check, X } from "lucide-react";
-import { useUser, SignInButton } from '@clerk/nextjs';
+import { useUser, SignUpButton } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -380,11 +380,11 @@ export default function PricingPage() {
         );
       } else {
         return (
-          <SignInButton mode="modal">
+          <SignUpButton mode="modal">
             <Button className={BUTTON_STYLES.secondary}>
               Get Started
             </Button>
-          </SignInButton>
+          </SignUpButton>
         );
       }
     }
@@ -398,11 +398,11 @@ export default function PricingPage() {
         Upgrade
       </Button>
     ) : (
-      <SignInButton mode="modal">
+      <SignUpButton mode="modal">
         <Button className={BUTTON_STYLES.primary}>
           Get Started
         </Button>
-      </SignInButton>
+      </SignUpButton>
     );
   };
 

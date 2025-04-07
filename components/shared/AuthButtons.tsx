@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useState, useEffect } from 'react';
-import { SignInButton } from '@clerk/nextjs';
+import { SignUpButton } from '@clerk/nextjs';
 import { Heart, MessageCircle, Star, Sparkles, Zap, Palette, Bookmark, Lightbulb } from 'lucide-react';
 
 interface AuthLikeButtonProps {
@@ -146,10 +146,10 @@ export function AuthLikeButton({ isSignedIn, onLike, isLiked, likesCount = 0, ic
   }
 
   return (
-    <SignInButton mode="modal">
+    <SignUpButton mode="modal">
       <button
         className="flex items-center gap-1.5 text-amber-400 hover:text-amber-500 transition-colors p-1.5 rounded-full group"
-        title="Sign in to react"
+        title="Sign up to react"
       >
         <div className="relative">
           <span className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-yellow-100/30 rounded-full blur-sm scale-110 transition-opacity duration-300"></span>
@@ -162,7 +162,7 @@ export function AuthLikeButton({ isSignedIn, onLike, isLiked, likesCount = 0, ic
           {likesCount > 0 ? likesCount : ""}
         </span>
       </button>
-    </SignInButton>
+    </SignUpButton>
   );
 }
 
@@ -198,10 +198,10 @@ export function AuthCommentButton({ isSignedIn, onComment, commentsCount = 0, la
   }
 
   return (
-    <SignInButton mode="modal">
+    <SignUpButton mode="modal">
       <button
         className="flex items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors p-1.5 rounded-full"
-        title="Sign in to comment"
+        title="Sign up to comment"
       >
         <div className="relative">
           <MessageCircle className={iconClassName} />
@@ -213,6 +213,6 @@ export function AuthCommentButton({ isSignedIn, onComment, commentsCount = 0, la
         </div>
         {label && <span className="text-xs sm:text-sm font-medium">{label}</span>}
       </button>
-    </SignInButton>
+    </SignUpButton>
   );
 } 

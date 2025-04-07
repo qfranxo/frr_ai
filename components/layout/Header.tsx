@@ -232,11 +232,11 @@ export default function Header() {
               </>
             ) : (
               <>
-                <SignInButton mode="modal">
+                <SignUpButton mode="modal">
                   <Button className="w-full py-2 text-blue-600 border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 hover:border-blue-300 transition-all duration-200 text-xs h-auto rounded-lg text-center">
-                    Sign In
+                    Sign Up
                   </Button>
-                </SignInButton>
+                </SignUpButton>
               </>
             )}
           </div>
@@ -299,11 +299,11 @@ export default function Header() {
                   </>
                 ) : (
                   <div className="grid gap-2.5">
-                    <SignInButton mode="modal">
+                    <SignUpButton mode="modal">
                       <Button className="w-full py-2 text-blue-600 border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 hover:border-blue-300 transition-all duration-200 text-xs h-auto rounded-lg text-center">
-                        Sign In
+                        Sign Up
                       </Button>
-                    </SignInButton>
+                    </SignUpButton>
                   </div>
                 )}
               </div>

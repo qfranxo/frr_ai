@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback, lazy } from 'react';
 import { Sparkles, Share2, Download, X, AlertCircle, AlertTriangle } from 'lucide-react';
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Image from 'next/image';
-import { useUser, SignInButton } from '@clerk/nextjs';
+import { useUser, SignUpButton } from '@clerk/nextjs';
 import Link from 'next/link';
 import { IMAGE_GENERATION_CONFIG } from '@/config/imageGeneration';
 import { modelStyleMapping } from "@/config/styleMapping";
@@ -1484,14 +1484,14 @@ function GenerateContent() {
             )}
           </button>
         ) : (
-          <SignInButton mode="modal" fallbackRedirectUrl="/generate">
+          <SignUpButton mode="modal" fallbackRedirectUrl="/generate">
             <button 
               className="w-full h-12 md:h-14 rounded-xl flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-xl hover:shadow-2xl font-medium text-sm md:text-base"
             >
               <Sparkles className="w-5 h-5" />
               <span>Generate AI Model</span>
             </button>
-          </SignInButton>
+          </SignUpButton>
         )}
       </div>
     );
