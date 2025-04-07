@@ -291,7 +291,8 @@ export default function PricingPage() {
   // Handle upgrade to Premium
   const handleUpgrade = async () => {
     if (!isSignedIn) {
-      router.push('/auth/sign-in');
+      // 호스팅된 UI URL로 리다이렉트 
+      window.location.href = 'https://steady-treefrog-25.clerk.accounts.dev/sign-in';
       return;
     }
     
