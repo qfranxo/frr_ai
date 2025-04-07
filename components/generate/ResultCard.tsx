@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { formatDate } from '@/utils/format';
 import { useUser } from '@clerk/nextjs';
+import { downloadImage } from '@/utils/image-utils';
 
 // 스타일에 따른 카테고리 매핑 함수
 const getCategoryFromStyle = (style?: string): string => {
@@ -117,28 +118,16 @@ export const ResultCard = ({ image }: IResultCard) => {
   const isOwner = user?.id === image.userId;
 
   const handleDownload = async () => {
-    // 소유자가 아닌 경우 다운로드 제한
-    if (!isOwner) {
-      toast.error("Only the owner can download this image");
-      return;
-    }
-    
-    try {
-      const response = await fetch(image.imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `frr-ai-model-${image.id}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Image downloaded successfully.');
-    } catch (error) {
-      toast.error('Error occurred while downloading.');
-    }
+    // 유틸리티 함수 사용으로 중복 코드 제거
+    return downloadImage({
+      imageUrl: image.imageUrl,
+      fileName: `frr-ai-model-${image.id}`,
+      fileType: 'jpg',
+      isOwnerCheck: {
+        isOwner,
+        ownerErrorMessage: "Only the owner can download this image"
+      }
+    });
   };
 
   const handleShare = async () => {
@@ -148,26 +137,121 @@ export const ResultCard = ({ image }: IResultCard) => {
         imageUrl: image.imageUrl ? "있음" : "없음",
         prompt: image.prompt,
         style: image.style,
-        renderingStyle: image.renderingStyle
+        renderingStyle: image.renderingStyle,
+        aspectRatio: image.aspectRatio
       });
       
       // 공유 API 직접 호출
       const shareToast = toast.loading('Sharing to community...');
       
+      // 이미 공유된 이미지인지 확인
+      const checkResponse = await fetch('/api/check-shared', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ imageUrl: image.imageUrl })
+      });
+      
+      const checkResult = await checkResponse.json();
+      
+      if (checkResult.success && checkResult.exists) {
+        // 이미 공유된 이미지는 다시 공유하지 않음
+        toast.dismiss(shareToast);
+        toast.info('이미 공유된 이미지입니다.');
+        
+        // 약간의 지연 후 커뮤니티 페이지로 이동
+        setTimeout(() => {
+          router.push('/community');
+        }, 1000);
+        
+        return;
+      }
+      
+      // 카테고리 계산
+      const categoryToUse = image.category || getCategoryFromStyle(image.style || image.renderingStyle);
+      
+      // 비율 결정 로직 개선
+      // 이미지에 이미 비율 정보가 있으면 그것을 사용
+      let aspectRatioToUse = image.aspectRatio || '9:16';
+      
+      // 이미지에 비율 정보가 없는 경우 URL에서 비율 정보 추출 시도
+      if (!image.aspectRatio && image.imageUrl) {
+        const sizeMatch = image.imageUrl.match(/(\d+)x(\d+)/);
+        if (sizeMatch && sizeMatch.length >= 3) {
+          const width = parseInt(sizeMatch[1]);
+          const height = parseInt(sizeMatch[2]);
+          
+          if (width && height) {
+            if (width === height) {
+              aspectRatioToUse = '1:1';
+            } else if (Math.abs(width / height - 16 / 9) < 0.1) {
+              aspectRatioToUse = '16:9';
+            } else if (Math.abs(width / height - 9 / 16) < 0.1) {
+              aspectRatioToUse = '9:16';
+            } else if (Math.abs(width / height - 4 / 3) < 0.1) {
+              aspectRatioToUse = '4:3';
+            } else if (Math.abs(width / height - 3 / 4) < 0.1) {
+              aspectRatioToUse = '3:4';
+            }
+          }
+        }
+      }
+      
+      // 이미지 요소의 실제 크기를 확인하여 비율 결정
+      if (typeof window !== 'undefined') {
+        try {
+          const img = document.createElement('img');
+          img.src = image.imageUrl;
+          
+          if (img.complete) {
+            // 이미지가 이미 로드된 경우
+            if (img.width && img.height) {
+              const ratio = img.width / img.height;
+              if (ratio > 0.98 && ratio < 1.02) {
+                aspectRatioToUse = '1:1';
+              } else if (ratio > 1.7 && ratio < 1.8) {
+                aspectRatioToUse = '16:9';
+              } else if (ratio > 0.55 && ratio < 0.57) {
+                aspectRatioToUse = '9:16';
+              } else if (ratio > 1.3 && ratio < 1.4) {
+                aspectRatioToUse = '4:3';
+              } else if (ratio > 0.7 && ratio < 0.8) {
+                aspectRatioToUse = '3:4';
+              }
+            }
+          } else {
+            // 이미지가 아직 로드되지 않은 경우 이벤트 리스너 추가
+            img.onload = () => {
+              console.log(`이미지 로드됨: 가로=${img.width}, 세로=${img.height}, 비율=${img.width/img.height}`);
+            };
+          }
+        } catch (e) {
+          console.error("이미지 비율 계산 오류:", e);
+        }
+      }
+      
+      console.log("결정된 비율:", aspectRatioToUse);
+      
+      // Replicate URL을 그대로 서버에 전달하여 서버에서 저장하도록 함
+      // 이렇게 하면 이미지 생성 시에는 저장하지 않고, 공유할 때만 저장됨
       const response = await fetch('/api/share', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl: image.imageUrl,
+          imageUrl: image.imageUrl, // Replicate URL을 그대로 전달
           prompt: image.prompt,
           style: image.style,
           renderingStyle: image.renderingStyle || image.style,
           gender: image.gender || '',
           age: image.age || '',
-          aspectRatio: image.aspectRatio || '1:1',
-          selectedCategory: image.category || ''
+          aspectRatio: aspectRatioToUse,
+          ratio: aspectRatioToUse, // ratio도 함께 전송
+          category: categoryToUse, // 카테고리를 명시적으로 전달
+          generationId: image.id || null, // 원본 이미지 ID 추가
+          store_image: true // 서버에서 이미지를 저장하도록 플래그 추가
         }),
       });
       
@@ -183,7 +267,7 @@ export const ResultCard = ({ image }: IResultCard) => {
           router.push('/community');
         }, 1000);
       } else {
-        console.error("공유 실패:", data.error, data.details);
+        console.error("Share failed:", data.error, data.details);
         toast.error(data.error || 'Failed to share.');
       }
     } catch (error) {

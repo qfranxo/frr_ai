@@ -1,12 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BlobAnimation } from "@/components/ui/blob-animation";
 
 export default function HeroSection() {
   return (
     <div className="relative overflow-hidden">
-      <BlobAnimation />
       <div className="max-w-7xl mx-auto px-4 pt-28 pb-48 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           <motion.div

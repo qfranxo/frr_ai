@@ -287,7 +287,7 @@ export const PostCard = ({
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
       {/* 이미지 컨테이너 */}
-      <div className="relative aspect-[3/4] w-full">
+      <div className={`relative ${post.aspectRatio === '9:16' ? 'aspect-[9/16]' : post.aspectRatio === '16:9' ? 'aspect-[16/9]' : 'aspect-[3/4]'} w-full`}>
         <Image
           src={post.imageUrl}
           alt={post.prompt || 'Generated image'}
@@ -356,7 +356,7 @@ export const PostCard = ({
                   </div>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-600 leading-relaxed break-words">
-                  {currentComments[0]?.text || '댓글 내용이 없습니다.'}
+                  {currentComments[0]?.text || 'No comment content'}
                 </p>
               </div>
             </div>
@@ -378,8 +378,8 @@ export const PostCard = ({
         <div className="flex items-center gap-3 sm:gap-4">
           <AuthLikeButton 
             isSignedIn={currentUser ? currentUser.id !== 'guest-user' && currentUser.id !== '' : false}
-            onLike={() => onLike(post.id)}
-            isLiked={isLiked}
+            onLike={() => onLike?.(post.id)}
+            isLiked={!!isLiked}
             likesCount={likesCount !== undefined && likesCount !== null ? likesCount : 0}
             iconSize={18}
           />

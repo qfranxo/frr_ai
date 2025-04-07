@@ -1,5 +1,6 @@
 // We'll use a simple mock for Clerk functionality since we're having import issues
 // In production, this would be replaced with actual Clerk client implementation
+import { supabase } from '@/lib/supabase';
 
 // User subscription type
 export interface SubscriptionInfo {
@@ -104,8 +105,8 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
     if (metadata?.subscriptionTier) {
       const subscriptionInfo: SubscriptionInfo = {
         tier: metadata.subscriptionTier,
-        maxGenerations: metadata.subscriptionTier === 'premium' ? 100 : 
-                        metadata.subscriptionTier === 'starter' ? 3 : 0,
+        maxGenerations: metadata.subscriptionTier === 'premium' ? 50 : 
+                        metadata.subscriptionTier === 'starter' ? 2 : 0,
         renewalDate: new Date(metadata.subscriptionRenewalDate || getNextMonthDate())
       };
       usersSubscriptions.set(userId, subscriptionInfo);
@@ -119,7 +120,7 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
     // Create default starter subscription
     const defaultSubscription: SubscriptionInfo = {
       tier: 'starter',
-      maxGenerations: 3, // Starter users get 3 generations per month
+      maxGenerations: 2, // Starter users get 2 generations per month
       renewalDate: new Date(getNextMonthDate())
     };
     
@@ -138,7 +139,7 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
     // Return default starter info on error
     return {
       tier: 'starter',
-      maxGenerations: 3,
+      maxGenerations: 2,
       renewalDate: new Date(getNextMonthDate())
     };
   }
@@ -239,7 +240,7 @@ export async function upgradeSubscription(userId: string): Promise<SubscriptionI
     const renewalDate = getNextMonthDate();
     const subscriptionInfo: SubscriptionInfo = {
       tier: 'premium',
-      maxGenerations: 100, // Premium users get 100 generations per month
+      maxGenerations: 50, // Premium users get 50 generations per month
       renewalDate: new Date(renewalDate)
     };
     
@@ -407,4 +408,132 @@ async function testConnection() {
 // DB 연결 상태 확인 함수
 export function isDatabaseConnected() {
   return isDbConnected;
+}
+
+// 사용자별 이미지 접근 및 관리 함수 추가
+
+/**
+ * 사용자별 공유된 이미지 목록을 가져옵니다.
+ * 
+ * @param userId 사용자 ID
+ * @returns 사용자가 생성한 공유 이미지 목록
+ */
+export async function getUserSharedImages(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('shared_images')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('사용자 공유 이미지 조회 오류:', error);
+      throw error;
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('사용자 공유 이미지 조회 중 오류 발생:', error);
+    throw error;
+  }
+}
+
+/**
+ * 사용자가 공유한 이미지를 공유 취소합니다.
+ * 
+ * @param userId 사용자 ID
+ * @param imageId 이미지 ID
+ * @returns 성공 여부
+ */
+export async function unshareUserImage(userId: string, imageId: string) {
+  try {
+    // 1. 이미지가 사용자의 것인지 확인
+    const { data: imageCheck, error: checkError } = await supabase
+      .from('shared_images')
+      .select('id, user_id, storage_path')
+      .eq('id', imageId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (checkError || !imageCheck) {
+      console.error('이미지 접근 권한 없음:', checkError || '사용자의 이미지가 아닙니다.');
+      return { success: false, error: '이미지 접근 권한이 없습니다.' };
+    }
+    
+    // 2. 이미지 공유 상태 업데이트
+    const { error: updateError } = await supabase
+      .from('shared_images')
+      .update({ shared: false })
+      .eq('id', imageId)
+      .eq('user_id', userId);
+    
+    if (updateError) {
+      console.error('이미지 공유 취소 오류:', updateError);
+      return { success: false, error: updateError.message };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('이미지 공유 취소 중 오류 발생:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : '알 수 없는 오류'
+    };
+  }
+}
+
+/**
+ * 사용자의 이미지를 삭제합니다.
+ * 
+ * @param userId 사용자 ID
+ * @param imageId 이미지 ID
+ * @returns 성공 여부
+ */
+export async function deleteUserImage(userId: string, imageId: string) {
+  try {
+    // 1. 이미지가 사용자의 것인지 확인
+    const { data: imageCheck, error: checkError } = await supabase
+      .from('shared_images')
+      .select('id, user_id, storage_path')
+      .eq('id', imageId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (checkError || !imageCheck) {
+      console.error('이미지 접근 권한 없음:', checkError || '사용자의 이미지가 아닙니다.');
+      return { success: false, error: '이미지 접근 권한이 없습니다.' };
+    }
+    
+    // 2. Storage에서 이미지 삭제 (storage_path가 있는 경우)
+    if (imageCheck.storage_path) {
+      const { error: storageError } = await supabase.storage
+        .from('image')
+        .remove([imageCheck.storage_path]);
+      
+      if (storageError) {
+        console.warn('스토리지 이미지 삭제 실패:', storageError);
+        // 스토리지 삭제 실패해도 DB에서는 삭제 진행
+      }
+    }
+    
+    // 3. DB에서 이미지 레코드 삭제
+    const { error: deleteError } = await supabase
+      .from('shared_images')
+      .delete()
+      .eq('id', imageId)
+      .eq('user_id', userId);
+    
+    if (deleteError) {
+      console.error('이미지 삭제 오류:', deleteError);
+      return { success: false, error: deleteError.message };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('이미지 삭제 중 오류 발생:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : '알 수 없는 오류'
+    };
+  }
 }

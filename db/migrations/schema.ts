@@ -47,17 +47,19 @@ import {
   // --- Comments ---
   export const comments = pgTable('comments', {
     id: uuid('id').primaryKey().defaultRandom(),
-    postId: uuid('post_id').references(() => communityPosts.id),
-    userId: uuid('user_id').references(() => users.id),
+    imageId: uuid('image_id'),
+    userId: text('user_id'),
     content: text('content').notNull(),
+    userName: text('user_name').notNull().default('사용자'),
     createdAt: timestamp('created_at').defaultNow(),
   });
   
   // --- Likes ---
   export const likes = pgTable('likes', {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').references(() => users.id),
-    generationId: uuid('generation_id').references(() => generations.id),
+    userId: text('user_id'),
+    imageId: uuid('image_id'),
+    userName: text('user_name').notNull().default('사용자'),
     createdAt: timestamp('created_at').defaultNow(),
   });
   
@@ -77,5 +79,19 @@ import {
     startedAt: timestamp('started_at').defaultNow(),
     expiresAt: timestamp('expires_at'),
     isActive: boolean('is_active').default(true),
+  });
+  
+  // --- Shared Images ---
+  export const shared_images = pgTable('shared_images', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    user_id: text('user_id').notNull(),
+    user_name: text('user_name').notNull().default('사용자'),
+    image_url: text('image_url').notNull(),
+    prompt: text('prompt'),
+    aspect_ratio: text('aspect_ratio').default('1:1'),
+    category: text('category').default('portrait'),
+    created_at: timestamp('created_at').defaultNow().notNull(),
+    show_on_community: boolean('show_on_community').default(true),
+    original_generation_id: text('original_generation_id'),
   });
   

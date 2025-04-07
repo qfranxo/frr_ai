@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { IMAGE_GENERATION_CONFIG } from '@/config/imageGeneration';
 import { modelStyleMapping } from "@/config/styleMapping";
 import { sql } from 'drizzle-orm';
+import { isReplicateUrl, isValidImageUrl } from "@/utils/image-utils";
 
 // 구독 정보 인터페이스
 interface SubscriptionInfo {
@@ -36,6 +37,8 @@ interface GeneratedImage {
   cameraDistance: string;
   isShared?: boolean; // 공유 완료 상태 추가
   isSharing?: boolean; // 공유 진행 중 상태 추가
+  storagePath?: string; // 추가된 스토리지 경로 추가
+  aspectRatio?: string; // 추가: 비율의 다른 이름
 }
 
 // 공통 스타일 정의
@@ -54,7 +57,7 @@ const LoadingModal = ({
   if (!isVisible) return null;
   
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[99999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, transform: 'translateZ(0)', willChange: 'transform', isolation: 'isolate' }}>
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -149,7 +152,7 @@ const SubscriptionStatus = ({ subscription }: SubscriptionStatusProps) => {
   if (isLoading) {
     return (
       <div className="inline-flex items-center bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
-        <div className="w-16 h-2.5 bg-gray-100 rounded-full overflow-hidden mr-2 animate-pulse"></div>
+        <div className="w-16 h-2.5 bg-gray-100 rounded-full overflow-hidden animate-pulse"></div>
         <div className="h-4 w-5 bg-gray-100 rounded animate-pulse mr-0.5"></div>
         <span className="text-gray-300 text-xs mr-0.5">/</span>
         <div className="h-4 w-5 bg-gray-100 rounded animate-pulse"></div>
@@ -292,7 +295,7 @@ function GenerateContent() {
         localStorage.removeItem('savedGenerateFormData');
       }
     } catch (error) {
-      console.error('저장된 프롬프트 불러오기 오류:', error);
+      console.error('Error loading saved prompt:', error);
     }
   }, [searchParams]);
 
@@ -393,31 +396,19 @@ function GenerateContent() {
   // 히스토리 로드 함수
   const loadGenerationHistory = () => {
     try {
-      const savedHistory = localStorage.getItem('generationHistory');
-      if (savedHistory) {
-        setHistory(JSON.parse(savedHistory).slice(0, 2)); // 최근 2개까지만 로드
+      const savedImages = localStorage.getItem('generatedImages');
+      if (savedImages) {
+        setHistory(JSON.parse(savedImages).slice(0, 2)); // 최근 2개까지만 로드
       }
     } catch (error) {
-      console.error('히스토리 로드 오류:', error);
+      console.error('Error loading history:', error);
     }
   };
 
   // 히스토리에 저장
   const saveToHistory = (newImage: GeneratedImage) => {
     try {
-      // 기존 이미지 히스토리 가져오기
-      const savedHistory = localStorage.getItem('generationHistory');
-      let updatedHistory: GeneratedImage[] = savedHistory ? JSON.parse(savedHistory) : [];
-      
-      // 중복 제거 후 최신 항목 추가
-      updatedHistory = [
-        newImage,
-        ...updatedHistory.filter(item => item.id !== newImage.id)
-      ].slice(0, 10); // 최대 10개 항목 유지
-      
-      localStorage.setItem('generationHistory', JSON.stringify(updatedHistory));
-      
-      // RecentImageCards에서 사용할 수 있도록 generatedImages에도 저장
+      // generatedImages에만 저장 (generationHistory 통합)
       const savedGenerated = localStorage.getItem('generatedImages');
       let generatedImages: GeneratedImage[] = savedGenerated ? JSON.parse(savedGenerated) : [];
       
@@ -434,9 +425,9 @@ function GenerateContent() {
         window.dispatchEvent(new Event('newImageGenerated'));
       }
       
-      setHistory(updatedHistory);
+      setHistory(generatedImages);
     } catch (error) {
-      console.error('히스토리 저장 오류:', error);
+      console.error('Error saving to history:', error);
     }
   };
 
@@ -673,11 +664,18 @@ function GenerateContent() {
         ageDescription = "elderly_person_over_60, senior citizen, aged person, wrinkled skin, gray hair, older person, mature face";
       }
 
-      console.log("Selected Age:", selectedAge);
-      console.log("Age Description:", ageDescription);
-      console.log("Selected Ratio:", selectedRatio);
-      console.log("Selected Render Style:", selectedRenderStyle);
-      console.log("Submit: 선택된 성별:", selectedGender);
+      // 개발 환경에서만 로그 출력하는 헬퍼 함수 추가
+      const debugLog = (message: string, data?: any) => {
+        // 모든 로그 출력 비활성화
+        return;
+      };
+
+      // 기존 console.log 호출을 debugLog로 대체
+      debugLog("Selected Age:", selectedAge);
+      debugLog("Age Description:", ageDescription);
+      debugLog("Selected Ratio:", selectedRatio);
+      debugLog("Selected Render Style:", selectedRenderStyle);
+      debugLog("Submit: 선택된 성별:", selectedGender);
       
       // 프롬프트 준비 및 인종 관련 키워드 처리
       let enhancedPrompt = fullPrompt;
@@ -759,7 +757,10 @@ function GenerateContent() {
       
       // 눈 색상 추가
       if (selectedEyes) {
-        enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.eyes[selectedEyes as keyof typeof modelStyleMapping.eyes]}`;
+        enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.eyes[selectedEyes as keyof typeof modelStyleMapping.eyes]}, symmetrical eyes, natural looking eyes, detailed eye texture, realistic eye reflections, detailed irises, realistic eyebrows, natural eyelashes`;
+      } else {
+        // 눈 색상이 선택되지 않았더라도 자연스러운 눈에 대한 프롬프트 추가
+        enhancedPrompt = `${enhancedPrompt}, symmetrical eyes, natural looking eyes, detailed eye texture, realistic eye reflections, detailed irises, realistic eyebrows, natural eyelashes`;
       }
       
       // 부정적인 프롬프트 추가 (기형적인 특징 방지)
@@ -769,10 +770,10 @@ function GenerateContent() {
       if (selectedRenderStyle === "anime") {
         negativePrompt += ", realistic face, realistic skin, 3D rendering, photorealistic, realistic lighting, realism, photorealism, realistic texture, too realistic";
       } else {
-        negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color";
+        negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color, different sized eyes, mismatched eye colors, uneven eyes, droopy eyes, googly eyes, wall-eyed, cross-eyed, strabismus, lazy eye, unfocused eyes, unrealistic iris, unrealistic pupil, artificial looking eyes";
       }
       
-      console.log("API 요청 파라미터:", {
+      debugLog("API 요청 파라미터:", {
         prompt: enhancedPrompt,
         negative_prompt: negativePrompt,
         style: selectedStyle,
@@ -805,9 +806,9 @@ function GenerateContent() {
       const result = await response.json();
       
       // 자세한 로깅 추가
-      console.log("API 응답:", result);
-      console.log("요청했던 성별:", selectedGender);
-      console.log("결과 성별 확인:", result.gender || "응답에 성별 정보 없음");
+      debugLog("API 응답:", result);
+      debugLog("요청했던 성별:", selectedGender);
+      debugLog("결과 성별 확인:", result.gender || "응답에 성별 정보 없음");
       
       if (!response.ok) {
         // 사용량 제한 응답 확인
@@ -824,9 +825,9 @@ function GenerateContent() {
         let errorMessage = result.error || "이미지 생성 실패";
         
         // Replicate API 월별 지출 한도 오류 처리
-        if (errorMessage.includes("Monthly spend limit reached") || errorMessage.includes("Payment Required") || errorMessage.includes("서비스 사용량 한도")) {
-          errorMessage = "서비스 사용량 한도에 도달했습니다. 관리자에게 문의하시거나 잠시 후 다시 시도해주세요.";
-          console.error("API 서비스 한도 오류:", result.error);
+        if (errorMessage.includes("Monthly spend limit reached") || errorMessage.includes("Payment Required") || errorMessage.includes("Service usage limit")) {
+          errorMessage = "Service usage limit reached. Please contact admin or try again later.";
+          console.error("API service limit error:", result.error);
           
           // 서비스 한도 알림 표시
           setShowServiceLimitAlert(true);
@@ -836,7 +837,7 @@ function GenerateContent() {
             toast.info("Please try again later or try with different style options.");
           }, 2000);
         } else {
-          console.error("API 오류:", errorMessage);
+          console.error("API error:", errorMessage);
         }
         
         toast.error(errorMessage);
@@ -850,7 +851,7 @@ function GenerateContent() {
       
       // 출력 확인
       if (result.output) {
-        console.log("생성된 이미지 URL:", result.output);
+        debugLog("생성된 이미지 URL:", result.output);
         
         // 구독 정보 업데이트
         if (result.subscription) {
@@ -873,7 +874,9 @@ function GenerateContent() {
           gender: selectedGender,
           age: selectedAge,
           ratio: selectedRatio,
-          cameraDistance: selectedCameraDistance || "medium"
+          cameraDistance: selectedCameraDistance || "medium",
+          storagePath: result.storagePath || '',
+          aspectRatio: result.aspectRatio || selectedRatio || '9:16' // 1:1 대신 선택된 비율 또는 9:16 사용
         };
         
         // 히스토리에 저장
@@ -914,11 +917,30 @@ function GenerateContent() {
     }
   };
 
-  // 공유 핸들러 수정
+  // 공유 핸들러 개선
   const handleShare = async (result: GeneratedImage, index: number) => {
     try {
       // 이미 공유 중이거나 공유된 이미지는 처리하지 않음
-      if (result.isShared || result.isSharing) {
+      if (result.isShared) {
+        toast.info('This image has already been shared.');
+        // 이미 공유된 이미지면 커뮤니티 페이지로 이동
+        router.push('/community');
+        return;
+      }
+      
+      if (result.isSharing) {
+        toast.info('This image is currently being shared.');
+        return;
+      }
+      
+      // 유효한 이미지 URL 확인
+      if (!result || !result.imageUrl) {
+        toast.error('Image URL is missing.');
+        return;
+      }
+      
+      if (!isValidImageUrl(result.imageUrl)) {
+        toast.error('Invalid image URL.');
         return;
       }
       
@@ -927,85 +949,19 @@ function GenerateContent() {
       updatedResults[index] = { ...updatedResults[index], isSharing: true };
       setResults(updatedResults);
       
-      console.log("handleShare called with result:", {
-        id: result.id,
-        imageUrl: result.imageUrl ? "URL exists" : "Missing URL",
-        prompt: result.prompt,
-        style: result.style,
-        renderingStyle: result.renderingStyle || selectedRenderStyle
-      });
-      
-      // 프롬프트 기반 카테고리 감지
-      let detectedCategory = '';
-      const promptLower = result.prompt.toLowerCase();
-      
-      // 카테고리 감지 로직
-      if (promptLower.includes('sci-fi') || promptLower.includes('future') || promptLower.includes('space') || 
-          promptLower.includes('futuristic') || promptLower.includes('cyber')) {
-        detectedCategory = 'sci-fi';
-      } else if (promptLower.includes('vintage') || promptLower.includes('retro') || promptLower.includes('old')) {
-        detectedCategory = 'vintage';
-      } else if (promptLower.includes('anime') || promptLower.includes('cartoon') || result.renderingStyle === 'anime') {
-        detectedCategory = 'anime';
-      } else if (promptLower.includes('portrait') || promptLower.includes('face') || promptLower.includes('person')) {
-        detectedCategory = 'portrait';
-      } else if (promptLower.includes('landscape') || promptLower.includes('nature') || promptLower.includes('scenery')) {
-        detectedCategory = 'landscape';
-      } else if (promptLower.includes('fantasy') || promptLower.includes('magical')) {
-        detectedCategory = 'fantasy';
-      } else if (promptLower.includes('city') || promptLower.includes('urban') || promptLower.includes('architecture')) {
-        detectedCategory = 'urban';
-      } else if (promptLower.includes('animal') || promptLower.includes('wildlife') || promptLower.includes('pet')) {
-        detectedCategory = 'animals';
-      } else if (promptLower.includes('abstract') || promptLower.includes('conceptual')) {
-        detectedCategory = 'abstract';
-      }
-      
-      console.log("Detected category from prompt:", detectedCategory);
-      
-      // 공유 관련 메시지 영어로 변경
-      const loadingToast = toast.loading('Sharing to community...');
-      
-      // 이미 공유된 이미지인지 확인을 위한 호출
-      console.log("Checking if image is already shared...");
-      const checkResponse = await fetch('/api/check-shared', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: result.imageUrl
-        }),
-      });
-      
-      const checkResult = await checkResponse.json();
-      console.log("Check shared result:", checkResult);
-      
-      // 이미 공유된 이미지인 경우 메시지 표시
-      if (checkResult.exists) {
-        toast.dismiss(loadingToast);
-        toast.info('This image has already been shared to the community.');
-        
-        // 공유됨 상태로 업데이트
-        const newResults = [...results];
-        newResults[index] = { ...newResults[index], isShared: true, isSharing: false };
-        setResults(newResults);
-        return;
-      }
+      // 로딩 토스트 표시
+      const loadingToast = toast.loading('Sharing image...');
       
       // 공유 API 요청 데이터 준비
       const shareData = {
-        imageUrl: result.imageUrl,
-        prompt: result.prompt,
-        renderingStyle: result.renderingStyle || selectedRenderStyle,
-        gender: result.gender,
-        age: result.age,
-        aspectRatio: result.ratio,
-        userId: user?.id || 'user_1234567890',
-        selectedCategory: detectedCategory, // 감지된 카테고리 전달
-        generationId: result.id // 원본 이미지 ID 추가
+        image_url: result.imageUrl.trim(),
+        prompt: result.prompt || '',
+        rendering_style: result.renderingStyle || selectedRenderStyle || '',
+        aspect_ratio: result.aspectRatio || result.ratio || '1:1', // aspectRatio 또는 ratio 사용
+        gender: result.gender || '',
+        age: result.age || '',
+        storage_path: result.storagePath || ''
       };
-      console.log("Sharing image with data:", shareData);
       
       // 공유 API 호출
       const response = await fetch('/api/share', {
@@ -1016,92 +972,134 @@ function GenerateContent() {
         body: JSON.stringify(shareData),
       });
       
-      const data = await response.json();
-      console.log("Share API response:", data);
+      // 응답 처리
+      let data: { success: boolean; data?: any; error?: string } = { success: false };
       
-      // 로딩 토스트 닫기
+      try {
+        data = await response.json();
+      } catch (responseError) {
+        console.error('Response processing error:', responseError);
+        data = { 
+          success: false, 
+          error: responseError instanceof Error ? responseError.message : 'Error processing response.'
+        };
+      }
+      
       toast.dismiss(loadingToast);
       
+      // 상태 업데이트
+      const newResults = [...results];
+      
       if (data.success) {
-        // 공유 성공 - 상태 업데이트
-        const newResults = [...results];
-        newResults[index] = { ...newResults[index], isShared: true, isSharing: false };
-        setResults(newResults);
+        // 공유 성공
+        if (index < newResults.length) {
+          newResults[index] = { 
+            ...newResults[index], 
+            isShared: true, 
+            isSharing: false,
+            // API 응답에서 반환된 영구 URL로 업데이트 (있는 경우)
+            imageUrl: data.data?.image_url || newResults[index].imageUrl
+          };
+          setResults(newResults);
+        }
         
-        // 히스토리도 업데이트
-        if (history.length > 0) {
-          const historyIndex = history.findIndex(item => item.id === result.id);
-          if (historyIndex !== -1) {
-            const newHistory = [...history];
-            newHistory[historyIndex] = { ...newHistory[historyIndex], isShared: true };
-            setHistory(newHistory);
-            
-            // localStorage 업데이트
-            try {
-              localStorage.setItem('generationHistory', JSON.stringify(newHistory));
-            } catch (error) {
-              console.error('히스토리 저장 오류:', error);
+        toast.success('Shared to community!');
+        
+        // 로컬 스토리지 업데이트 (isShared 플래그 설정)
+        if (typeof window !== 'undefined') {
+          try {
+            const storedImages = localStorage.getItem('generatedImages');
+            if (storedImages) {
+              const images = JSON.parse(storedImages);
+              const updatedImages = images.map((img: any) => {
+                if (img.id === result.id) {
+                  return { ...img, isShared: true };
+                }
+                return img;
+              });
+              localStorage.setItem('generatedImages', JSON.stringify(updatedImages));
+              
+              // 로컬 스토리지 변경 이벤트 발생시키기
+              window.dispatchEvent(new Event('storage'));
+              window.dispatchEvent(new CustomEvent('newImageGenerated'));
             }
+          } catch (e) {
+            console.error('Local storage update error:', e);
           }
         }
         
-        // 공유 성공
-        toast.success('Shared to community successfully!', {
-          position: 'top-center'
-        });
-        
-        // 커뮤니티 페이지로 이동 (약간 지연)
+        // 공유 성공 후 커뮤니티 페이지로 이동
         setTimeout(() => {
           router.push('/community');
-        }, 1000);
+        }, 1000); // 1초 후 이동
       } else {
-        // 공유 실패 - 공유 상태 초기화
-        const newResults = [...results];
-        newResults[index] = { ...newResults[index], isSharing: false };
-        setResults(newResults);
-        
         // 공유 실패
-        console.error("Share failed:", data.error, data.details);
-        toast.error(data.error || 'Sharing failed.', {
-          position: 'top-center'
-        });
+        if (index < newResults.length && newResults[index]) {
+          newResults[index] = { ...newResults[index], isSharing: false };
+          setResults(newResults);
+        }
+        
+        // 오류 메시지 추출 및 표시
+        const errorMessage = data.error || 
+          (response.ok ? 'Unknown error' : `Server error (${response.status})`);
+        
+        console.error("Share failed:", errorMessage);
+        toast.error(`Image sharing error: ${errorMessage}`);
       }
     } catch (error) {
-      // 에러 시 공유 상태 초기화
-      const newResults = [...results];
-      const updatedResult = { ...newResults[index], isSharing: false };
-      newResults[index] = updatedResult;
-      setResults(newResults);
-      
       // 에러 처리
-      console.error('Share error details:', error instanceof Error ? {
-        message: error.message,
-        stack: error.stack
-      } : String(error));
+      console.error('Error during sharing:', error);
+      toast.error(`Image sharing error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
-      toast.error('An error occurred while sharing.', {
-        position: 'top-center'
-      });
+      // 상태 초기화
+      const newResults = [...results];
+      const indexToUpdate = Math.min(index, newResults.length - 1);
+      
+      if (indexToUpdate >= 0 && indexToUpdate < newResults.length) {
+        newResults[indexToUpdate] = { ...newResults[indexToUpdate], isSharing: false };
+        setResults(newResults);
+      }
     }
   };
 
-  // 다운로드 함수 추가
+  // 다운로드 함수 개선
   const handleDownload = async (imageUrl: string) => {
     try {
+      // 유효한 이미지 URL 확인
+      if (!isValidImageUrl(imageUrl)) {
+        toast.error('유효하지 않은 이미지 URL입니다.');
+        return;
+      }
+      
+      const loadingToast = toast.loading('이미지를 다운로드하는 중...');
+      
+      // Replicate URL 경고 표시 (개발 환경에서만)
+      if (process.env.NODE_ENV === 'development' && isReplicateUrl(imageUrl)) {
+        console.warn('Replicate URL은 일시적이며 곧 만료됩니다. 이미지가 다운로드되지 않을 수 있습니다.');
+      }
+      
       const response = await fetch(imageUrl);
+      
+      if (!response.ok) {
+        throw new Error(`이미지 다운로드 실패: ${response.status} ${response.statusText}`);
+      }
+      
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `AI_model_${Date.now()}.jpg`; // 파일명 설정
+      a.download = `AI_model_${Date.now()}.webp`; // webp 형식으로 변경
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success('Image saved successfully!');
+      
+      toast.dismiss(loadingToast);
+      toast.success('이미지가 성공적으로 저장되었습니다!');
     } catch (error) {
-      console.error('Download error:', error);
-      toast.error('Failed to save the image.');
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      console.error('다운로드 오류:', errorMessage);
+      toast.error(`이미지 저장 실패: ${errorMessage}`);
     }
   };
 
@@ -1499,6 +1497,14 @@ function GenerateContent() {
     );
   };
 
+  // 이미지 URL이 없을 때 fallback 이미지 URL 사용
+  const getFallbackImageUrl = (imageUrl: string | null | undefined): string => {
+    if (!imageUrl || imageUrl.trim() === '') {
+      return '/fallback-image.png';
+    }
+    return imageUrl;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-x-hidden">
       {/* 배경 효과 */}
@@ -1631,20 +1637,20 @@ function GenerateContent() {
                                   handleShare(item, historyIndex);
                                 }
                               }}
-                              className={`p-1 rounded-full ${
+                              className={`p-2 rounded-full flex items-center transition-all duration-200 ${
                                 item.isShared 
-                                  ? "bg-green-50 text-green-600" 
+                                  ? "bg-green-50 text-green-600 ring-1 ring-green-200" 
                                   : item.isSharing
-                                  ? "bg-gray-100 text-gray-400 cursor-wait"
-                                  : "hover:bg-gray-100 text-gray-600"
+                                  ? "bg-gray-50 text-gray-400 cursor-wait"
+                                  : "bg-white hover:bg-blue-50 text-blue-500 hover:text-blue-600 hover:shadow-md"
                               }`}
                               disabled={item.isShared || item.isSharing}
                             >
                               {item.isShared 
-                                ? <span className="text-xs text-green-600 flex items-center"><Share2 className="w-3 h-3 mr-1" />Shared</span>
+                                ? <><span className="mr-1 text-xs">Shared</span><span className="inline-block text-sm">⌛</span></>
                                 : item.isSharing
-                                ? <span className="animate-spin text-xs">⏳</span>
-                                : <Share2 className="w-3.5 h-3.5" />
+                                ? <><span className="mr-1 text-xs">Sharing</span><span className="inline-block animate-spin text-sm" style={{ animationDuration: '1.5s' }}>⏳</span></>
+                                : <><span className="mr-1 text-xs">Share</span><span className="inline-block text-sm transform transition-transform hover:rotate-180 duration-300">⏳</span></>
                               }
                             </button>
                           </div>
@@ -1676,8 +1682,8 @@ function GenerateContent() {
                       }
                     }}
                     placeholder="Describe the advertising model you want in detail..."
-                    className="block w-full min-h-[80px] md:min-h-[120px] p-3 md:p-6 rounded-t-2xl border-none focus:ring-0 transition-all resize-none bg-transparent text-gray-800 placeholder:text-gray-400 text-sm md:text-lg whitespace-pre-wrap break-words leading-relaxed max-w-prose"
-                    style={{ lineHeight: '1.6', letterSpacing: '0.01em', columnWidth: 'auto' }}
+                    className="block w-full min-h-[80px] md:min-h-[120px] p-3 md:p-6 rounded-t-2xl border-none focus:ring-0 transition-all resize-none bg-transparent text-gray-800 placeholder:text-gray-400 text-sm md:text-lg whitespace-pre-wrap break-words leading-relaxed"
+                    style={{ lineHeight: '1.6', letterSpacing: '0.01em' }}
                     maxLength={200}
                   />
                   
@@ -1789,22 +1795,20 @@ function GenerateContent() {
                   <div className="px-4 md:px-6 pt-4 md:pt-6">
                     <div className="flex justify-center">
                       <div className={`relative w-full max-w-sm overflow-hidden rounded-xl md:rounded-2xl ${
-                        results && results.length > 0 && results[0]?.ratio
-                          ? results[0].ratio === "16:9" 
-                            ? "aspect-video" 
-                            : results[0].ratio === "9:16" 
-                              ? "aspect-[9/16]" 
-                              : "aspect-square"
-                          : "aspect-square"
+                        results[0]?.ratio === "16:9" 
+                          ? "aspect-video" 
+                          : results[0]?.ratio === "9:16" 
+                            ? "aspect-[9/16]" 
+                            : "aspect-square"
                       }`}>
-                        {results && results.length > 0 && results[0]?.imageUrl && (
+                        {results[0]?.imageUrl ? (
                           <>
                             <Image
-                              src={results[0].imageUrl}
+                              src={getFallbackImageUrl(results[0].imageUrl)}
                               alt={results[0].prompt || "Generated image"}
                               fill
                               className={`${
-                                results[0].ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
+                                results[0]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
                               }`}
                               sizes="(max-width: 768px) 100vw, 50vw"
                               priority
@@ -1813,6 +1817,16 @@ function GenerateContent() {
                               {results[0].ratio}
                             </div>
                           </>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <div className="text-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 mx-auto mb-2">
+                                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                <circle cx="9" cy="9" r="2"/>
+                                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                              </svg>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1833,7 +1847,7 @@ function GenerateContent() {
                     <div className="flex items-center gap-2 mb-3 md:mb-4">
                       <span className="text-sm font-medium">
                         {selectedGender === "female" ? "👩" : "👨‍💼"}
-                    </span>
+                      </span>
                       <span className="text-sm font-medium text-gray-700">{`${selectedAge}, ${selectedGender}`}</span>
                   </div>
                     <p className="text-sm text-gray-600 leading-relaxed break-words">
@@ -1845,30 +1859,30 @@ function GenerateContent() {
                   <div className="bg-gray-50 border-t border-gray-100 px-4 md:px-6 py-3 h-[54px] md:h-[60px] flex items-center justify-between">
                     <button
                       onClick={() => results && results.length > 0 ? handleShare(results[0], 0) : null}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors touch-manipulation border ${
+                      className={`flex items-center justify-center p-2.5 rounded-full transition-all duration-200 ${
                         results && results.length > 0 && results[0]?.isShared 
-                          ? "bg-green-50 text-green-600 border-green-100 cursor-default" 
+                          ? "bg-green-50 text-green-600 ring-1 ring-green-200" 
                           : results && results.length > 0 && results[0]?.isSharing
-                          ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
-                          : "hover:bg-white text-gray-700 border-transparent hover:border-gray-200"
+                          ? "bg-gray-50 text-gray-400 cursor-wait"
+                          : "bg-white hover:bg-blue-50 text-blue-500 hover:text-blue-600 hover:shadow-md"
                       }`}
                       disabled={!results || results.length === 0 || results[0]?.isShared || results[0]?.isSharing}
                     >
                       {results && results.length > 0 && results[0]?.isShared 
-                        ? <><Share2 className="w-4 h-4" /><span className="text-sm font-medium">Shared</span></>
+                        ? <><span className="mr-1 text-xs">Shared</span><span className="inline-block text-sm">⌛</span></>
                         : results && results.length > 0 && results[0]?.isSharing
-                        ? <><span className="animate-spin mr-1">⏳</span><span className="text-sm font-medium">Sharing...</span></>
-                        : <><Share2 className="w-4 h-4" /><span className="text-sm font-medium">Share</span></>
+                        ? <><span className="mr-1 text-xs">Sharing</span><span className="inline-block animate-spin text-sm" style={{ animationDuration: '1.5s' }}>⏳</span></>
+                        : <><span className="mr-1 text-xs">Share</span><span className="inline-block text-sm transform transition-transform hover:rotate-180 duration-300">⏳</span></>
                       }
                     </button>
                     
                     <button
-                      onClick={() => results && results.length > 0 && results[0]?.imageUrl ? handleDownload(results[0].imageUrl) : null}
+                      onClick={() => results && results.length > 0 && results[0]?.imageUrl ? handleDownload(getFallbackImageUrl(results[0].imageUrl)) : null}
                       className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors touch-manipulation border border-blue-100"
                       disabled={!results || results.length === 0 || !results[0]?.imageUrl}
                     >
-                      <Download className="w-4 h-4" />
-                      <span className="text-sm font-medium">Save Image</span>
+                      <span className="inline-block text-sm mr-1.5">⏱️</span>
+                      <span className="text-xs font-medium">Download</span>
                     </button>
                   </div>
 
@@ -1901,19 +1915,33 @@ function GenerateContent() {
                               ? "aspect-[9/16]" 
                               : "aspect-square"
                         }`}>
-                          <Image
-                            src={results[1].imageUrl}
-                            alt={results[1].prompt || "Generated image"}
-                            fill
-                            className={`${
-                              results[1]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
-                            }`}
-                            sizes="(max-width: 768px) 100vw, 50vw"
-                            priority
-                          />
-                          <div className="absolute bottom-2 right-2 bg-white/80 backdrop-blur-sm text-gray-800 text-xs px-2 py-1 rounded-full shadow-sm border border-gray-200">
-                            {results[1].ratio}
-                          </div>
+                          {results[1]?.imageUrl ? (
+                            <>
+                              <Image
+                                src={getFallbackImageUrl(results[1].imageUrl)}
+                                alt={results[1].prompt || "Generated image"}
+                                fill
+                                className={`${
+                                  results[1]?.ratio === "9:16" ? "object-contain bg-gray-50" : "object-cover"
+                                }`}
+                                sizes="(max-width: 768px) 100vw, 50vw"
+                                priority
+                              />
+                              <div className="absolute bottom-2 right-2 bg-white/80 backdrop-blur-sm text-gray-800 text-xs px-2 py-1 rounded-full shadow-sm border border-gray-200">
+                                {results[1].ratio}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <div className="text-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 mx-auto mb-2">
+                                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                                  <circle cx="9" cy="9" r="2"/>
+                                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                </svg>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1945,29 +1973,30 @@ function GenerateContent() {
                     <div className="bg-gray-50 border-t border-gray-100 px-4 md:px-6 py-3 h-[54px] md:h-[60px] flex items-center justify-between">
                       <button
                         onClick={() => handleShare(results[1], 1)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors touch-manipulation border ${
+                        className={`flex items-center justify-center p-2.5 rounded-full transition-all duration-200 ${
                           results[1]?.isShared 
-                            ? "bg-green-50 text-green-600 border-green-100 cursor-default" 
+                            ? "bg-green-50 text-green-600 ring-1 ring-green-200" 
                             : results[1]?.isSharing
-                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
-                            : "hover:bg-white text-gray-700 border-transparent hover:border-gray-200"
+                            ? "bg-gray-50 text-gray-400 cursor-wait"
+                            : "bg-white hover:bg-blue-50 text-blue-500 hover:text-blue-600 hover:shadow-md"
                         }`}
                         disabled={results[1]?.isShared || results[1]?.isSharing}
                       >
                         {results[1]?.isShared 
-                          ? <><Share2 className="w-4 h-4" /><span className="text-sm font-medium">Shared</span></>
+                          ? <><span className="mr-1 text-xs">Shared</span><span className="inline-block text-sm">⌛</span></>
                           : results[1]?.isSharing
-                          ? <><span className="animate-spin mr-1">⏳</span><span className="text-sm font-medium">Sharing...</span></>
-                          : <><Share2 className="w-4 h-4" /><span className="text-sm font-medium">Share</span></>
+                          ? <><span className="mr-1 text-xs">Sharing</span><span className="inline-block animate-spin text-sm" style={{ animationDuration: '1.5s' }}>⏳</span></>
+                          : <><span className="mr-1 text-xs">Share</span><span className="inline-block text-sm transform transition-transform hover:rotate-180 duration-300">⏳</span></>
                         }
                       </button>
                       
                       <button
-                        onClick={() => handleDownload(results[1]?.imageUrl)}
+                        onClick={() => results[1]?.imageUrl ? handleDownload(getFallbackImageUrl(results[1].imageUrl)) : null}
                         className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors touch-manipulation border border-blue-100"
+                        disabled={!results[1]?.imageUrl}
                       >
-                        <Download className="w-4 h-4" />
-                        <span className="text-sm font-medium">Save Image</span>
+                        <span className="inline-block text-sm mr-1.5">⏱️</span>
+                        <span className="text-xs font-medium">Download</span>
                       </button>
                     </div>
 

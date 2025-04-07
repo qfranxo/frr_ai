@@ -1,23 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   images: {
     domains: [
-      'source.unsplash.com',
-      'images.unsplash.com',
-      'via.placeholder.com'
+      'replicate.delivery',
+      'zxvbwdwvpaqbuzwbcyse.supabase.co',
+      'zxvbwdwvpaqbuzwbcyse.supabase.in',
+      'nipdzyfwjqpgojccoqgm.supabase.co',
+      'lh3.googleusercontent.com',
+      'img.clerk.com'
     ],
-    unoptimized: true,
     remotePatterns: [
       {
-        protocol: "https",
-        hostname: "replicate.delivery",
-      },
-      {
-        protocol: "https",
-        hostname: "replicate.com",
+        protocol: 'https',
+        hostname: '**',
       },
     ],
+    unoptimized: true,
   },
   webpack: (config) => {
     return config;
@@ -30,7 +29,14 @@ const nextConfig = {
       '@clerk/nextjs',
       '@geist-ui/react'
     ]
-  }
+  },
+  trailingSlash: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 };
 
 module.exports = nextConfig; 

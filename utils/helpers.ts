@@ -1,6 +1,6 @@
 // 공통 유틸리티 함수
 export const formatDate = (date: Date): string => {
-  return new Intl.DateTimeFormat('ko-KR', {
+  return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'

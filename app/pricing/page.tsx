@@ -65,7 +65,7 @@ export default function PricingPage() {
       },
       description: "Experience the world of AI art",
       features: [
-        "3 image generations/month",
+        "2 image generations/month",
         "Basic styles",
         "Community support",
       ],
@@ -73,12 +73,12 @@ export default function PricingPage() {
     {
       name: "Pro",
       price: {
-        monthly: 9,
-        yearly: 90,
+        monthly: 5,
+        yearly: 48, // $4 per month for a year
       },
       description: "For professional creative work",
       features: [
-        "100 image generations/month",
+        "50 image generations/month",
         "High-resolution output",
         "Priority generation",
         "All style options",
@@ -107,25 +107,79 @@ export default function PricingPage() {
 
   const faqs = [
     {
-      question: "Who owns the copyright to generated images?",
-      answer: "All generated images are owned by the creator. You can use them freely for commercial purposes."
+      question: "Who owns the copyright of the generated images?",
+      answer: "You own the images you generate and may use them freely, including for commercial purposes. However, if any legal issues arise (e.g., copyright or likeness violations), the responsibility lies solely with you. We only provide the image generation tool and do not assume legal ownership or responsibility for the output."
     },
     {
-      question: "How does the free trial work?",
-      answer: "Get 1 free generation upon signup. Upgrade to a paid plan for additional generations."
+      question: "Are the generated images saved on the server?",
+      answer: "No, generated images are not saved by default. Only images that you explicitly share are stored on our servers for 30 days. After that, they are permanently deleted."
     },
     {
-      question: "Can I change plans anytime?",
-      answer: "Yes, you can switch plans freely. When upgrading, we'll prorate the difference."
+      question: "How do I generate images?",
+      answer: "You can generate images by going to the Generate page and entering your prompt and desired options."
     },
     {
-      question: "Do you offer enterprise plans?",
-      answer: "Yes, we provide custom plans tailored to your needs. Contact our sales team for details."
+      question: "Can I download the images I generated?",
+      answer: "Yes, you can download any image you generate in high resolution using the Download button."
+    },
+    {
+      question: "Is the subscription automatically renewed?",
+      answer: "Yes, auto-renewal is enabled by default. You can disable it at any time from your account settings."
+    },
+    {
+      question: "Does my subscription end immediately if I cancel?",
+      answer: "No, canceling your subscription will stop future payments, but you'll retain Premium access until the end of your current billing period."
+    },
+    {
+      question: "How do I prevent the next payment?",
+      answer: "Simply cancel your subscription before your renewal date to avoid being charged again."
+    },
+    {
+      question: "Who can write comments?",
+      answer: "Only logged-in users can write comments. You can edit or delete only the comments you've written."
+    },
+    {
+      question: "Can I delete shared images later?",
+      answer: "Yes, you can delete any image you have previously shared."
+    },
+    {
+      question: "Where can I update my name and profile photo?",
+      answer: "Your name and profile photo are synced automatically from your Clerk account."
+    },
+    {
+      question: "How do I delete my account?",
+      answer: "You can delete your account directly via Clerk by going to Settings > Security > Delete Account."
+    },
+    {
+      question: "Is there a Team plan?",
+      answer: "Yes, a Team plan is currently in development and will be launched soon."
+    },
+    {
+      question: "Can I use the platform on mobile?",
+      answer: "Absolutely. The platform is fully optimized for mobile, so you can create and manage your images on any device."
     }
   ];
 
   const FAQSection = () => {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 4;
+    const totalPages = Math.ceil(faqs.length / itemsPerPage);
+    
+    const currentFaqs = faqs.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+    
+    const goToNextPage = () => {
+      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+      setOpenIndex(null);
+    };
+    
+    const goToPrevPage = () => {
+      setCurrentPage(prev => Math.max(prev - 1, 1));
+      setOpenIndex(null);
+    };
 
     return (
       <div className="relative mt-16 md:mt-24 max-w-3xl mx-auto px-4">
@@ -137,9 +191,9 @@ export default function PricingPage() {
         </div>
 
         <div className="grid gap-3 md:gap-4">
-          {faqs.map((faq, index) => (
+          {currentFaqs.map((faq, index) => (
             <div
-              key={faq.question}
+              key={`${currentPage}-${index}`}
               className="bg-white rounded-xl md:rounded-2xl overflow-hidden shadow-sm"
             >
               <button
@@ -151,6 +205,11 @@ export default function PricingPage() {
                   <h3 className="text-base md:text-lg font-semibold text-gray-900">
                     {faq.question}
                   </h3>
+                </div>
+                <div className={`transition-transform duration-200 ${openIndex === index ? 'rotate-180' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
                 </div>
               </button>
               <div
@@ -168,6 +227,43 @@ export default function PricingPage() {
             </div>
           ))}
         </div>
+        
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-8">
+            <button
+              onClick={goToPrevPage}
+              disabled={currentPage === 1}
+              className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                currentPage === 1 
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            
+            <span className="text-sm font-medium text-gray-700">
+              Page {currentPage} of {totalPages}
+            </span>
+            
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === totalPages}
+              className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                currentPage === totalPages 
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     );
   };

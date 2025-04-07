@@ -1,19 +1,23 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { Share2, MessageCircle, Heart, AlertCircle, X, Send, Trash2, Camera, Palette, Mountain, Building, Wand2, Rocket, Clock, Dribbble, PawPrint, Sparkles, Box, Lock, User, Download, Plus } from 'lucide-react';
+import { Share2, MessageCircle, Heart, AlertCircle, X, Send, Trash2, Camera, Palette, Mountain, Building, Wand2, Rocket, Clock, Dribbble, PawPrint, Sparkles, Box, Lock, User, Download, Plus, ChevronLeft, ChevronRight, Search, Filter, RefreshCw, MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser, SignInButton } from '@clerk/nextjs';
-import { useLikes } from '@/hooks/useLikes';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { communityApi } from '@/lib/api';
+import { ImageCard } from '@/components/shared/ImageCard';
+import { v4 as uuidv4 } from 'uuid';
+import { formatDate } from '@/utils/format';
 import { useComments } from '@/hooks/useComments';
 import Masonry from 'react-masonry-css';
 import { AuthLikeButton, AuthCommentButton } from '@/components/shared/AuthButtons';
 import { ConfirmModal } from '@/components/shared/ConfirmModal';
-import { communityApi } from '@/lib/api';
 import LoadingScreen from '@/components/shared/LoadingScreen';
-import { ImageCard } from '@/components/shared/ImageCard';
 
 // 댓글 타입 정의
 interface Comment {
@@ -22,6 +26,7 @@ interface Comment {
   userId: string;
   userName: string;
   text: string;
+  content?: string; // DB에는 content로 저장됨
   createdAt: string;
 }
 
@@ -83,73 +88,151 @@ const getCategoryColor = (category: string | undefined): string => {
   return colorMap[category] || 'bg-gray-100 text-gray-700 border border-gray-200';
 };
 
-// 스타일에 따른 카테고리 매핑 함수
-const getCategoryFromStyle = (style?: string): string => {
-  if (!style) return 'portrait';
+// 스타일과 프롬프트를 함께 고려하여 카테고리 추출
+const getCategoryFromStyle = (style: string, prompt?: string): string => {
+  // 프롬프트가 없고 스타일도 없는 경우 기본값 반환
+  if (!style && !prompt) return 'portrait';
   
-  const styleLower = style.toLowerCase();
-  
-  // 스타일에 따른 카테고리 매핑 테이블
-  const styleToCategory: { [key: string]: string } = {
-    // 애니메이션 스타일
-    'anime': 'anime',
-    'digital_illustration': 'anime',
-    'digital_illustration/pixel_art': 'anime',
-    'digital_illustration/hand_drawn': 'anime',
-    'digital_illustration/infantile_sketch': 'anime',
-    'cartoon': 'anime',
+  // 프롬프트 분석을 통한 카테고리 판단
+  if (prompt) {
+    // 카테고리 키워드 맵핑
+    const categoryKeywords: Record<string, string[]> = {
+      'landscape': ['landscape', 'mountain', 'nature', 'lake', 'forest', 'ocean', 'sea', 'sunset', 'sunrise', 'valley', 'canyon', 'waterfall', 'scenery', 'outdoor', 'natural', 'scenic', 'vista', 'panorama', 'horizon', 'river', 'beach', 'hill', 'sky', 'cloud'],
+      'portrait': ['portrait', 'person', 'face', 'woman', 'man', 'girl', 'boy', 'people', 'human', 'facial', 'self', 'headshot', 'selfie', 'close-up', 'closeup', 'head', 'profile', 'bust'],
+      'urban': ['urban', 'city', 'street', 'building', 'architecture', 'downtown', 'skyscraper', 'metropolis', 'town', 'skyline', 'cityscape', 'infrastructure', 'bridge', 'road'],
+      'anime': ['anime', 'manga', 'cartoon', 'comic', 'animation', 'animated', 'toon', 'chibi', 'japanese animation', 'anime style'],
+      'fantasy': ['fantasy', 'magical', 'dragon', 'fairy', 'elf', 'wizard', 'mythical', 'mystic', 'enchanted', 'creature', 'magic', 'sorcery', 'myth', 'legend'],
+      'sci-fi': ['sci-fi', 'science fiction', 'futuristic', 'robot', 'space', 'alien', 'cyber', 'galaxy', 'neon', 'future', 'spacecraft', 'spaceship', 'technology', 'cyberpunk', 'cyborg', 
+      'dystopian', 'planetary', 'universe', 'stars', 'tech', 'advanced', 'space station', 'space colony', 'futuristic city', 'hologram', 'laser', 'mech', 'artificial intelligence', 'ai', 'digital', 'synthetic'],
+      'vintage': ['vintage', 'retro', 'old', 'classic', 'antique', 'history', 'nostalgic', 'ancient', 'old-fashioned', 'historical', 'sepia', 'aged', 'toned portrait', 'vintage photograph', 'vintage style', 'vintage photo', 'retro style'],
+      'abstract': ['abstract', 'geometric', 'pattern', 'colorful', 'modern art', 'non-representational', 'contemporary', 'minimalist', 'conceptual', 'surreal', 'expressionist', 'cubist', 'abstract art', 'shapes', 'lines', 'asymmetrical', 'non-objective', 'experimental', 'color field', 'composition'],
+      'animals': ['animal', 'cat', 'dog', 'bird', 'pet', 'wildlife', 'lion', 'tiger', 'elephant', 'zebra', 'bear', 'wolf', 'fox', 'deer', 'horse', 'monkey', 'penguin', 'fish', 'shark', 'whale', 'dolphin', 'reptile', 'snake', 'lizard', 'turtle', 'insect', 'butterfly', 'zoo', 'farm animal'],
+      'fashion': ['fashion', 'clothing', 'outfit', 'dress', 'apparel', 'clothes', 'garment', 'accessory', 'jewelry', 'hat', 'shoes', 'bag', 'designer', 'runway', 'collection', 'trend', 'couture', 'fashion model', 'chic', 'stylish', 'trendy', 'vogue', 'fashionable', 'attire', 'wear', 'wardrobe', 'ensemble', 'fashion shoot', 'look', 'fashion photo', 'fashionista', 'jacket', 'coat', 'suit', 'pants', 'skirt', 'blouse', 'shirt', 'lingerie', 'jeans', 'denim', 'haute couture', 'casual wear', 'fashion show', 'catwalk', 'fashion design', 'fashion industry', 'fashion week', 'model', 'photoshoot', 'studio', 'editorial', 'fashion editorial', 'fashion magazine', 'fashion brand', 'boutique', 'elegant', 'luxury']
+    };
+
+    // 카테고리 우선순위 (높은 번호가 더 높은 우선순위)
+    const categoryPriority: Record<string, number> = {
+      'vintage': 10,  // vintage에 가장 높은 우선순위 부여
+      'fashion': 8,
+      'sci-fi': 8,
+      'fantasy': 7,
+      'anime': 7,
+      'abstract': 6,
+      'animals': 6,
+      'urban': 5,
+      'landscape': 5,
+      'portrait': 4
+    };
     
-    // 포트레이트 스타일
-    'realistic': 'portrait',
-    'realistic_image': 'portrait',
-    'realistic_image/studio_portrait': 'portrait',
-    'realistic_image/natural_light': 'portrait',
-    'portrait': 'portrait',
-    'photo': 'portrait',
+    // 프롬프트 소문자 변환
+    const lowerPrompt = prompt.toLowerCase();
     
-    // 풍경 스타일
-    'landscape': 'landscape',
-    'nature': 'landscape',
-    'scenery': 'landscape',
+    // 카테고리별 키워드 매칭 점수
+    const scores: Record<string, number> = {};
     
-    // 도시 스타일
-    'city': 'urban',
-    'urban': 'urban',
-    'architecture': 'urban',
+    // 각 카테고리별 매칭 점수 계산
+    Object.entries(categoryKeywords).forEach(([category, keywords]) => {
+      scores[category] = 0;
+      keywords.forEach(keyword => {
+        // 정확한 단어 매칭 (앞뒤에 공백이나 구두점이 있는 경우)
+        const regex = new RegExp(`(^|\\s|[.,!?;])${keyword}(\\s|[.,!?;]|$)`, 'i');
+        if (regex.test(lowerPrompt)) {
+          scores[category] += 2; // 정확한 매칭에는 더 높은 점수
+        } 
+        // 부분 문자열 매칭
+        else if (lowerPrompt.includes(keyword)) {
+          scores[category] += 1;
+        }
+      });
+      
+      // 가중치 적용
+      scores[category] *= categoryPriority[category] || 1.0;
+    });
     
-    // 판타지 스타일
-    'fantasy': 'fantasy',
-    'magical': 'fantasy',
-    'dragon': 'fantasy',
+    // 특수 케이스 처리: fashion 관련 구문이 있으면 추가 가중치
+    const fashionPhrases = ['fashion photography', 'fashion shoot', 'fashion model', 'fashion design', 
+                           'fashion show', 'fashion editorial', 'high fashion', 'fashion week',
+                           'studio photography', 'editorial photography'];
     
-    // 미래적 스타일
-    'sci-fi': 'sci-fi',
-    'future': 'sci-fi',
-    'space': 'sci-fi',
-    'futuristic': 'sci-fi',
-    'cyber': 'sci-fi',
+    for (const phrase of fashionPhrases) {
+      if (lowerPrompt.includes(phrase)) {
+        scores['fashion'] += 5; // 명확한 패션 관련 구문에 높은 가중치 부여
+        break;
+      }
+    }
     
-    // 빈티지 스타일
-    'vintage': 'vintage',
-    'retro': 'vintage',
-    'old style': 'vintage',
-    'classic': 'vintage'
-  };
-  
-  // 정확한 매칭 먼저 시도
-  if (styleToCategory[styleLower]) {
-    return styleToCategory[styleLower];
-  }
-  
-  // 부분 매칭으로 카테고리 찾기
-  for (const [styleKey, category] of Object.entries(styleToCategory)) {
-    if (styleLower.includes(styleKey)) {
-      return category;
+    // sci-fi 관련 구문에 특별 가중치 부여
+    const scifiPhrases = ['science fiction', 'sci-fi scene', 'futuristic city', 'space station', 
+                         'alien planet', 'cyberpunk', 'cyber city', 'futuristic technology',
+                         'space colony', 'space exploration', 'dystopian future', 'futuristic world',
+                         'advanced technology', 'space travel', 'space war', 'future society'];
+                         
+    for (const phrase of scifiPhrases) {
+      if (lowerPrompt.includes(phrase)) {
+        scores['sci-fi'] += 5; // 명확한 sci-fi 관련 구문에 높은 가중치 부여
+        break;
+      }
+    }
+    
+    // 가장 높은 점수를 가진 카테고리 찾기
+    let bestCategory = 'portrait';
+    let highestScore = 0;
+    
+    Object.entries(scores).forEach(([category, score]) => {
+      if (score > highestScore) {
+        highestScore = score;
+        bestCategory = category;
+      }
+    });
+    
+    // 점수가 0보다 크면 프롬프트 기반 카테고리 반환
+    if (highestScore > 0) {
+      return bestCategory;
     }
   }
   
-  // 기본값
-  return 'portrait';
+  // 프롬프트에서 카테고리를 찾지 못한 경우 스타일 기반으로 판단
+  const styleToCategory: Record<string, string> = {
+    'portrait': 'portrait',
+    'anime': 'anime', 
+    'realistic': 'portrait',
+    'digital art': 'fantasy',
+    'painting': 'landscape',
+    'landscape': 'landscape',
+    'urban': 'urban',
+    'fantasy': 'fantasy',
+    'sci-fi': 'sci-fi',
+    'scifi': 'sci-fi',
+    'science fiction': 'sci-fi',
+    'futuristic': 'sci-fi',
+    'cyberpunk': 'sci-fi',
+    'space': 'sci-fi',
+    'neon': 'sci-fi',
+    'vintage': 'vintage',
+    'abstract': 'abstract',
+    'animals': 'animals',
+    'highfashion': 'fashion',
+    'fashion': 'fashion',
+    'studio': 'fashion',
+    'editorial': 'fashion',
+    'lookbook': 'fashion'
+  };
+
+  // 정확한 매치 확인
+  if (style && styleToCategory[style.toLowerCase()]) {
+    return styleToCategory[style.toLowerCase()];
+  }
+  
+  // 부분 매치 확인
+  if (style) {
+    for (const [key, value] of Object.entries(styleToCategory)) {
+      if (style.toLowerCase().includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+  }
+
+  return 'portrait'; // 모든 분석에서 카테고리를 찾지 못한 경우 기본값
 };
 
 // 카테고리별 샘플 프롬프트 가져오기
@@ -329,20 +412,46 @@ export default function CommunityPage() {
     imageUrl: user?.imageUrl
   };
   
-  // 좋아요 및 댓글 기능 훅 사용
-  const { likes: likesMap, likedPosts: likedPostsMap, handleLike } = useLikes(communityData as any, currentUser.id);
+  // 댓글 모달 상태 관리 추가
+  const [commentModalState, setCommentModalState] = useState({ postId: '', text: '' });
+  
+  // 좋아요 및 댓글 상태 관리를 위한 직접 상태 선언
+  const [likesMap, setLikesMap] = useState<Record<string, number>>({});
+  const [likedPostsMap, setLikedPostsMap] = useState<Record<string, boolean>>({});
+  const [commentsMap, setCommentsMap] = useState<Record<string, any[]>>({});
+  
+  // 기존 좋아요 및 댓글 기능 훅 사용 (데이터 초기화용)
   const { 
-    commentsMap, 
-    handleComment, 
-    deleteComment,
-    isCommentModalOpen, 
+    commentsMap: hookCommentsMap, 
+    handleComment: addComment, 
+    deleteComment: removeComment,
+    isCommentModalOpen: hookIsCommentModalOpen, 
     openCommentModal, 
     closeCommentModal,
     commentText,
     handleCommentTextChange,
     submitComment,
-    selectedPostId
+    selectedPostId: hookSelectedPostId
   } = useComments(communityData as any, currentUser);
+
+  // 커스텀 상태 변수 추가
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+  // 상태 초기화 효과
+  useEffect(() => {
+    setCommentsMap(hookCommentsMap || {});
+  }, [hookCommentsMap]);
+  
+  useEffect(() => {
+    setIsCommentModalOpen(hookIsCommentModalOpen);
+  }, [hookIsCommentModalOpen]);
+  
+  useEffect(() => {
+    if (hookSelectedPostId) {
+      setSelectedPostId(hookSelectedPostId);
+    }
+  }, [hookSelectedPostId]);
   
   // 댓글 입력 필드 ref
   const commentInputRef = useRef<HTMLInputElement>(null);
@@ -431,90 +540,366 @@ export default function CommunityPage() {
     });
   };
 
-  // 데이터 가져오기 및 필터링 설정
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // 통합된 API 호출 사용
-        const result = await communityApi.loadCommunityData(true);
-        
-        if (result.success) {
-          const newData = result.data;
-          setCommunityData(newData);
-          console.log("Community data loaded:", newData.length, "images", "source:", result.source || "unknown");
-          
-          // 캐시 및 상태 초기화
-          setDeletedImages({});  // 삭제된 이미지 목록 초기화
-        } else {
-          throw new Error(result.error || 'Failed to fetch community data');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        console.error('Error fetching community data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchData();
-    
-    // 컴포넌트 언마운트 시 정리 작업을 위한 빈 함수 리턴
-    return () => {};
-  }, []);
-
-  // 각 카테고리에서 1장씩 삭제하는 함수
-  const deleteOneImagePerCategory = async (data: GenerationPost[]) => {
-    for (const category of categoriesToDelete) {
-      const categoryImages = data.filter(post => post.category === category);
+  // 호출 가능한 데이터 로드 함수 직접 정의
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
       
-      if (categoryImages.length > 0 && !categoryImageDeleted[category]) {
+      // 1. 게시물 데이터 가져오기
+      const result = await communityApi.loadCommunityData(true);
+      
+      if (result.success) {
+        const postsData = result.data || [];
+        
+        // 2. 각 게시물의 댓글 데이터를 로드
+        const postsWithComments = [...postsData];
+        
+        // 댓글 데이터 초기화를 위한 임시 맵
+        const commentsData: Record<string, any[]> = {};
+        
+        // 댓글 데이터 로드를 병렬로 처리 - 배치 방식 사용
         try {
-          // 첫 번째 이미지를 삭제
-          const imageToDelete = categoryImages[0];
+          // 배치 크기 설정 (너무 많은 요청을 동시에 보내지 않도록)
+          const batchSize = 10; // 더 큰 배치 사이즈로 변경하여 API 호출 횟수 감소
+          const postBatches = [];
           
-          // 통합된 API 호출 사용
-          await communityApi.deletePost(imageToDelete.id, currentUser.id);
+          // 배치로 나누기
+          for (let i = 0; i < postsWithComments.length; i += batchSize) {
+            postBatches.push(postsWithComments.slice(i, i + batchSize));
+          }
           
-          // 삭제된 이미지 상태 업데이트
-          setDeletedImages(prev => ({
+          // 각 배치별로 순차적으로 처리
+          for (const batch of postBatches) {
+            const commentPromises = batch.map(post => 
+              communityApi.loadCommentsForImage(post.id)
+                .then(response => {
+                  if (response.success && response.data) {
+                    // 댓글 정렬 - 최신순 (createdAt 기준 내림차순)
+                    const sortedComments = [...response.data].sort((a, b) => {
+                      const dateA = new Date(a.createdAt || 0);
+                      const dateB = new Date(b.createdAt || 0);
+                      return dateB.getTime() - dateA.getTime();
+                    });
+                    
+                    // 댓글 데이터를 게시물에 추가
+                    post.comments = sortedComments;
+                    // 별도의 상태 관리용 맵에도 저장
+                    commentsData[post.id] = sortedComments;
+                    return post;
+                  }
+                  return post;
+                })
+                .catch(() => {
+                  // 에러 발생 시 빈 배열로 초기화
+                  post.comments = post.comments || [];
+                  return post;
+                })
+            );
+            
+            // 현재 배치의 모든 요청이 완료될 때까지 기다림
+            await Promise.all(commentPromises);
+          }
+          
+          // 댓글 맵 상태 업데이트
+          setCommentsMap(commentsData);
+          // 게시물 데이터 업데이트
+          setCommunityData(postsWithComments);
+        } catch (commentError) {
+          // 에러 시 게시물 데이터만 업데이트
+          setCommunityData(postsData);
+        }
+      } else {
+        throw new Error(result.error || "커뮤니티 데이터를 가져오는데 실패했습니다.");
+      }
+    } catch (err) {
+      // 에러 메시지만 표시, 로그 제거
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 초기 데이터 로드
+  useEffect(() => {
+    fetchData();
+  }, []);
+  
+  // 좋아요 핸들러 업데이트
+  const handlePostLike = async (postId: string) => {
+    // 좋아요 기능이 제거되었으므로 아무 동작도 하지 않음
+    return;
+  };
+  
+  // 댓글 모달 열기/닫기 함수 직접 구현
+  const openCommentModalCustom = (postId: string) => {
+    setSelectedPostId(postId);
+    setIsCommentModalOpen(true);
+    
+    // 원래 훅의 함수도 호출하여 상태 동기화
+    if (openCommentModal) {
+      openCommentModal(postId);
+    }
+  };
+  
+  const closeCommentModalCustom = () => {
+    setIsCommentModalOpen(false);
+    setSelectedPostId(null);
+    
+    // 원래 훅의 함수도 호출하여 상태 동기화
+    if (closeCommentModal) {
+      closeCommentModal();
+    }
+  };
+  
+  // 댓글 핸들러 업데이트
+  const handlePostComment = async (postId: string, text?: string) => {
+    try {
+      if (!text) {
+        // 댓글 모달 열기
+        openCommentModalCustom(postId);
+        return;
+      }
+      
+      const tempId = `temp-${Date.now()}`;
+      const tempComment = {
+        id: tempId,
+        imageId: postId,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        text,
+        createdAt: new Date().toISOString()
+      };
+      
+      // 낙관적 UI 업데이트 - 댓글 추가
+      setCommentsMap(prev => ({
+        ...prev,
+        [postId]: [tempComment, ...(prev[postId] || [])]
+      }));
+      
+      // 게시글 데이터에 댓글 수 업데이트
+      setCommunityData(prev => prev.map(post => {
+        if (post.id === postId) {
+          const currentComments = post.comments || [];
+          return {
+            ...post,
+            comments: [tempComment, ...currentComments]
+          };
+        }
+        return post;
+      }));
+      
+      // 토스트 표시
+      toast.success('Adding comment...');
+      
+      // 댓글 목록 스크롤을 최신 댓글이 보이도록 즉시 조정
+      setTimeout(() => {
+        if (commentScrollRef.current) {
+          commentScrollRef.current.scrollTop = 0;
+        }
+      }, 50);
+      
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        body: JSON.stringify({
+          imageId: postId,
+          text
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success) {
+          // 실제 댓글로 교체 - data.comment가 undefined인 경우 안전하게 처리
+          setCommentsMap(prev => ({
             ...prev,
-            [imageToDelete.id]: true
+            [postId]: prev[postId].map(c => {
+              if (c.id === tempId) {
+                // data.comment가 존재하는지 확인
+                if (data.comment) {
+                  return { 
+                    ...data.comment, 
+                    text: data.comment.text || data.comment.content || text 
+                  };
+                } else {
+                  // API에서 comment 객체를 반환하지 않는 경우 원래 tempComment 유지하되 id만 업데이트
+                  return { 
+                    ...c, 
+                    id: data.id || data.commentId || c.id 
+                  };
+                }
+              }
+              return c;
+            })
           }));
           
-          // 해당 카테고리 처리 완료 표시
-          setCategoryImageDeleted(prev => ({
-            ...prev,
-            [category]: true
+          // 게시글 데이터의 댓글 정보도 함께 업데이트
+          setCommunityData(prev => prev.map(post => {
+            if (post.id === postId) {
+              const updatedComments = (post.comments || []).map(c => {
+                if (c.id === tempId) {
+                  if (data.comment) {
+                    return { 
+                      ...data.comment, 
+                      text: data.comment.text || data.comment.content || text 
+                    };
+                  } else {
+                    return { 
+                      ...c, 
+                      id: data.id || data.commentId || c.id 
+                    };
+                  }
+                }
+                return c;
+              });
+              
+              return {
+                ...post,
+                comments: updatedComments
+              };
+            }
+            return post;
           }));
           
-          // 화면에서도 삭제
-          setCommunityData(prev => prev.filter(item => item.id !== imageToDelete.id));
+          toast.success('Comment added successfully');
           
-          console.log(`Deleted one image from ${category} category`);
-        } catch (error) {
-          console.error(`Error deleting image from ${category}:`, error);
+          // 댓글 입력 필드 초기화 (모달은 닫지 않음)
+          if (commentInputRef.current) {
+            commentInputRef.current.value = '';
+            if (handleCommentTextChange) handleCommentTextChange('');
+            
+            // 댓글 목록 스크롤을 최신 댓글이 보이도록 다시 한번 조정
+            if (commentScrollRef.current) {
+              commentScrollRef.current.scrollTop = 0;
+            }
+            
+            // 입력 필드에 즉시 포커스하여 연속 댓글 작성 용이하게
+            setTimeout(() => {
+              if (commentInputRef.current) commentInputRef.current.focus();
+            }, 100);
+          }
         }
       }
+    } catch (error) {
+      console.error('댓글 오류:', error);
+      toast.error('Failed to add comment');
+    }
+  };
+  
+  // 댓글 삭제 핸들러 업데이트
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    try {
+      // 낙관적 UI 업데이트
+      setCommentsMap(prev => ({
+        ...prev,
+        [postId]: prev[postId].filter(c => c.id !== commentId)
+      }));
+      
+      // 게시글 데이터의 댓글 정보도 함께 업데이트
+      setCommunityData(prev => prev.map(post => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            comments: (post.comments || []).filter(c => c.id !== commentId)
+          };
+        }
+        return post;
+      }));
+      
+      // 토스트 표시
+      toast.success('Deleting comment...');
+      
+      // 모달 닫기
+      setDeleteModalState({
+        isOpen: false,
+        type: 'comment',
+        postId: '',
+        commentId: ''
+      });
+      
+      const response = await fetch(`/api/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        toast.success('Comment deleted successfully');
+      } else {
+        throw new Error('API 호출 실패');
+      }
+    } catch (error) {
+      console.error('댓글 삭제 오류:', error);
+      toast.error('Failed to delete comment');
+      
+      // 삭제 실패 시 원래대로 복구
+      await fetchData();
     }
   };
 
   // 카테고리별 필터링
   const filteredPosts = communityData.filter(post => {
+    // Replicate URL은 필터링하지 않고 imageUrl이 없는 경우만 제외
+    if (!post.imageUrl) {
+      return false;
+    }
+    
     if (selectedCategory === 'all') return true;
     if (selectedCategory === 'my-cards') {
       // 현재 사용자가 작성한 이미지만 표시
       return post.userId === currentUser.id;
     }
-    return post.category === selectedCategory;
+    
+    // post에 category가 명시적으로 있는 경우 해당 값 사용
+    if (post.category) {
+      return post.category === selectedCategory;
+    }
+    
+    // renderingStyle 정보 추출
+    let styleValue = '';
+    if (typeof post.renderingStyle === 'string') {
+      styleValue = post.renderingStyle;
+    } else if (post.renderingStyle && typeof post.renderingStyle === 'object' && 'id' in post.renderingStyle) {
+      styleValue = (post.renderingStyle as { id?: string })?.id || '';
+    }
+    
+    // 카테고리 추론
+    const inferredCategory = getCategoryFromStyle(styleValue, post.prompt);
+    
+    // 추론된 카테고리와 선택된 카테고리 비교
+    return inferredCategory === selectedCategory;
+  }).map(post => {
+    // post에 category 속성이 없는 경우 추가
+    if (!post.category) {
+      // renderingStyle 정보 추출
+      let styleValue = '';
+      if (typeof post.renderingStyle === 'string') {
+        styleValue = post.renderingStyle;
+      } else if (post.renderingStyle && typeof post.renderingStyle === 'object' && 'id' in post.renderingStyle) {
+        styleValue = (post.renderingStyle as { id?: string })?.id || '';
+      }
+      
+      // 카테고리 추론
+      const inferredCategory = getCategoryFromStyle(styleValue, post.prompt);
+      
+      // 추론된 카테고리 설정
+      post.category = inferredCategory;
+    }
+    
+    // 이미지 URL 확인
+    let imageUrl = post.imageUrl;
+    
+    // 원본 URL 그대로 사용 (저장은 ImageCard 컴포넌트에서 처리)
+    return {
+      ...post,
+      category: post.category,
+      imageUrl: imageUrl || '/fallback-image.png'
+    };
   });
-  
-  // 카테고리별 샘플 프롬프트 가져오기
-  const getSamplePromptForCategory = (categoryId: string) => {
-    const category = categories.find(cat => cat.id === categoryId);
-    return category?.samplePrompt || categories[0].samplePrompt;
-  };
   
   // 지도 데이터 변환 함수
   const mapToArray = <T,>(map: Record<string, T>): [string, T][] => {
@@ -526,52 +911,97 @@ export default function CommunityPage() {
     return likedPostsMap[postId] || false;
   };
   
-  // 컴포넌트 상태에서 해당 postId의 좋아요 수 획득
+  // 컴포넌트 상태에서 해당 postId의 좋아요 수 획득 - 좋아요 카운트가 정확히 반영되도록 수정
   const getPostLikes = (postId: string, defaultLikes: number = 0) => {
-    return likesMap[postId] !== undefined ? likesMap[postId] : defaultLikes;
+    // 좋아요 맵에서 가져오되, 해당 값이 정확히 0인 경우를 포함하여 체크
+    if (likesMap[postId] !== undefined) {
+      return likesMap[postId];
+    }
+    
+    // 원본 데이터에서 좋아요 수 가져오기
+    const post = communityData.find(p => p.id === postId);
+    return post?.likes !== undefined ? post.likes : defaultLikes;
   };
   
   // 컴포넌트 상태에서 해당 postId의 댓글 목록 획득
   const getPostComments = (postId: string | undefined, defaultComments: Comment[] = []) => {
     try {
-      if (!postId) return [];
+      if (!postId) return defaultComments;
       
-      // commentsMap이 정의되어 있는지 확인
-      if (!commentsMap) return defaultComments;
+      // 1. 게시물 객체에서 직접 comments 속성을 먼저 확인
+      const post = communityData.find(p => p.id === postId);
+      if (post?.comments && Array.isArray(post.comments)) {
+        // 댓글 데이터 유효성 확인 및 content/text 필드 호환성 처리
+        return post.comments.map(comment => {
+          // content와 text 필드 간 호환성 처리
+          if (comment.content && !comment.text) {
+            comment.text = comment.content;
+          } else if (comment.text && !comment.content) {
+            comment.content = comment.text;
+          }
+          return comment;
+        });
+      }
       
-      // postId에 해당하는 댓글이 존재하는지 확인
-      const comments = commentsMap[postId];
+      // 2. 그 다음 commentsMap에서 확인
+      if (commentsMap && commentsMap[postId] && Array.isArray(commentsMap[postId])) {
+        return commentsMap[postId].map(comment => {
+          // content와 text 필드 간 호환성 처리
+          if (comment.content && !comment.text) {
+            comment.text = comment.content;
+          } else if (comment.text && !comment.content) {
+            comment.content = comment.text;
+          }
+          return comment;
+        });
+      }
       
-      // 댓글이 배열인지 확인
-      if (!Array.isArray(comments)) return defaultComments;
-      
-      // 댓글 배열의 각 항목이 유효한지 확인
-      return comments.filter(comment => comment && typeof comment === 'object');
+      // 3. 해당되는 댓글이 없으면 빈 배열 반환
+      return defaultComments;
     } catch (error) {
       console.error('댓글 정보 가져오기 오류:', error);
       return defaultComments;
     }
   };
   
-  // 공유하기 기능
-  const handleShare = (post: GenerationPost) => {
-    // 현재 URL 기준으로 공유 URL 생성
-    const shareUrl = `${window.location.origin}/shared/${post.id}`;
-    
-    // 클립보드에 복사
-    navigator.clipboard.writeText(shareUrl)
-      .then(() => {
-        toast.success('Link copied to clipboard!', {
-          position: 'top-center'
-        });
-      })
-      .catch(() => {
-        toast.error('Failed to copy link to clipboard.', {
-          position: 'top-center'
-        });
+  // 다운로드 핸들러 추가
+  const handleDownload = async (post: GenerationPost) => {
+    // 소유자가 아닌 경우 다운로드 제한
+    if (post.userId !== currentUser.id) {
+      toast.error("Only the owner can download this image", {
+        position: 'top-center'
       });
+      return;
+    }
+    
+    try {
+      const response = await fetch(post.imageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `frr-ai-image-${post.id}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Image downloaded successfully.', {
+        position: 'top-center'
+      });
+    } catch (error) {
+      toast.error('Error occurred while downloading.', {
+        position: 'top-center'
+      });
+    }
   };
-  
+
+  // 공유하기 기능 - 빈 함수로 변경
+  const handleShare = async (imageId: string) => {
+    // 공유 기능 비활성화
+    console.log('Share functionality disabled');
+  };
+
   // 사용자 이름 표시 함수
   const getUserDisplayName = (userId: string | undefined | null) => {
     try {
@@ -609,23 +1039,23 @@ export default function CommunityPage() {
     if (userName && currentUser) {
       // 완전 일치하는 경우
       if (userName === currentUser.name || userName === currentUser.username) {
-        return currentUser.name || currentUser.username || '사용자';
+        return currentUser.name || currentUser.username || 'User';
       }
       
       // 기본값인 경우 현재 사용자 정보 사용
-      if (userName === 'User' || userName === 'Anonymous User' || userName === 'Guest' || userName === '게스트') {
-        return currentUser.name || currentUser.username || '사용자';
+      if (userName === 'User' || userName === 'Anonymous User' || userName === 'Guest' || userName === 'Guest') {
+        return currentUser.name || currentUser.username || 'User';
       }
     }
     
     // userName이 없거나 빈 문자열인 경우
     if (!userName || userName === '') {
-      return currentUser ? (currentUser.name || currentUser.username || '사용자') : '사용자';
+      return currentUser ? (currentUser.name || currentUser.username || 'User') : 'User';
     }
     
     // Clerk ID 형식인 경우
     if (userName.startsWith('user_')) {
-      return currentUser ? (currentUser.name || currentUser.username || '사용자') : '사용자';
+      return currentUser ? (currentUser.name || currentUser.username || 'User') : 'User';
     }
     
     // 이메일 형식인 경우 @ 앞부분만 사용
@@ -641,23 +1071,42 @@ export default function CommunityPage() {
   const handleDeletePost = async (postId: string) => {
     try {
       // 낙관적 UI 업데이트
-      setCommunityData(prev => prev.filter(post => post.id !== postId));
+      setCommunityData(prevData => prevData.filter(post => String(post.id) !== postId));
       
-      // 통합된 API 호출 사용
-      const result = await communityApi.deletePost(postId, currentUser.id);
+      // 토스트 표시
+      toast.success('Deleting post...');
       
-      if (!result.success) {
-        // 실패 시 UI 복원
-        window.location.reload();
-      }
-    } catch (error) {
-      console.error('Error deleting post:', error);
-      toast.error('Failed to delete post.', {
-        position: 'top-center'
+      // 모달 닫기
+      setDeleteModalState({
+        isOpen: false,
+        type: 'post',
+        postId: '',
+        commentId: ''
       });
       
-      // 에러 시 UI 복원
-      window.location.reload();
+      const response = await fetch(`/api/community/${postId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // 성공 시 UI 업데이트
+        setCommunityData(prev => prev.filter(post => String(post.id) !== postId));
+        toast.success('Post deleted successfully');
+      } else {
+        console.error('API 응답 오류:', data);
+        throw new Error(data.error || 'API 호출 실패');
+      }
+    } catch (error) {
+      console.error('게시물 삭제 오류:', error);
+      toast.error('Failed to delete post');
+      
+      // 삭제 실패 시 데이터 다시 가져오기
+      await fetchData();
     }
   };
   
@@ -730,37 +1179,8 @@ export default function CommunityPage() {
     return null;
   };
 
-  // 다운로드 핸들러 추가
-  const handleDownload = async (post: GenerationPost) => {
-    // 소유자가 아닌 경우 다운로드 제한
-    if (post.userId !== currentUser.id) {
-      toast.error("Only the owner can download this image", {
-        position: 'top-center'
-      });
-      return;
-    }
-    
-    try {
-      const response = await fetch(post.imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `frr-ai-image-${post.id}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Image downloaded successfully.', {
-        position: 'top-center'
-      });
-    } catch (error) {
-      toast.error('Error occurred while downloading.', {
-        position: 'top-center'
-      });
-    }
-  };
+  // 디버그 모드 비활성화
+  const debugRef = useRef<boolean>(false);
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-hidden">
@@ -846,34 +1266,28 @@ export default function CommunityPage() {
                 columnClassName="pl-2 sm:pl-4 md:pl-6 lg:pl-8 bg-clip-padding"
               >
                 {filteredPosts.map((post) => (
-                  <div key={post.id} className="mb-4 sm:mb-6 md:mb-8 ml-0 mr-0 w-[95%] sm:w-[98%] md:w-full">
-                    <ImageCard 
-                      post={post}
+                  <div className="break-inside-avoid mb-6 sm:mb-8 md:mb-10" key={post.id}>
+                    <ImageCard
+                      post={{
+                        ...post,
+                        // post 객체 내부에 카테고리 정보 설정
+                        category: post.category || getCategoryFromStyle(typeof post.renderingStyle === 'string' 
+                          ? post.renderingStyle 
+                          : (post.renderingStyle as { id?: string })?.id || '', post.prompt)
+                      }}
                       variant="community"
                       layout="masonry"
-                      currentUser={currentUser}
                       isSignedIn={!!isSignedIn}
-                      onLike={() => handleLike(post.id)}
-                      onComment={(postId, text) => {
-                        if (text) {
-                          handleComment(postId, text);
-                        } else {
-                          openCommentModal(postId);
-                        }
-                      }}
-                      onDeleteComment={(postId, commentId) => deleteComment(postId, commentId)}
+                      currentUser={currentUser}
+                      onLike={handlePostLike}
+                      onComment={handlePostComment}
+                      onDeleteComment={handleDeleteComment}
                       onShare={handleShare}
                       onDownload={handleDownload}
-                      onDeletePost={(postId) => setDeleteModalState({
-                        isOpen: true,
-                        type: 'post',
-                        postId,
-                        commentId: ''
-                      })}
-                      isLiked={isPostLiked(post.id)}
-                      likesCount={getPostLikes(post.id, post.likes || 0)}
-                      commentsCount={getPostComments(post.id, post.comments || []).length}
-                      comments={getPostComments(post.id, post.comments || []) as any}
+                      onDeletePost={post.userId === currentUser.id ? handleDeletePost : undefined}
+                      isLiked={isPostLiked(String(post.id))}
+                      likesCount={getPostLikes(String(post.id), post.likes || 0)}
+                      comments={getPostComments(String(post.id), post.comments || []) as any}
                     />
                   </div>
                 ))}
@@ -887,7 +1301,7 @@ export default function CommunityPage() {
       {isCommentModalOpen && selectedPostId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={closeCommentModal}
+          onClick={closeCommentModalCustom}
         >
           <div
             className="bg-white rounded-2xl w-full max-w-lg max-h-[75vh] sm:max-h-[80vh] overflow-hidden"
@@ -897,7 +1311,11 @@ export default function CommunityPage() {
             <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-8 py-4 sm:py-6 flex items-center justify-between">
               <div>
                 <h3 className="text-base sm:text-lg font-medium text-gray-900">
-                  Comments {getPostComments(selectedPostId).length > 0 && `(${getPostComments(selectedPostId).length})`}
+                  Comments {getPostComments(selectedPostId).length > 0 && (
+                    <span className="inline-flex items-center justify-center ml-1.5 w-5 h-5 sm:w-6 sm:h-6 text-xs sm:text-sm font-medium bg-blue-100 text-blue-800 rounded-full">
+                      {getPostComments(selectedPostId).length}
+                    </span>
+                  )}
                 </h3>
                 {(() => {
                   const post = communityData.find(p => p.id === selectedPostId);
@@ -906,7 +1324,7 @@ export default function CommunityPage() {
                   const styleValue = typeof post.renderingStyle === 'string' 
                     ? post.renderingStyle 
                     : (post.renderingStyle as { id?: string })?.id || '';
-                  const category = post.category || getCategoryFromStyle(styleValue);
+                  const category = post.category || getCategoryFromStyle(styleValue, post.prompt);
                   const categoryIcon = category === 'all' ? '✨' :
                     category === 'portrait' ? '👩‍🎨' :
                     category === 'landscape' ? '🌄' :
@@ -931,7 +1349,7 @@ export default function CommunityPage() {
                   );
                 })()}
               </div>
-              <button onClick={closeCommentModal} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <button onClick={closeCommentModalCustom} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
               </button>
             </div>
@@ -969,14 +1387,7 @@ export default function CommunityPage() {
                     <div className="flex items-center justify-between mb-1 sm:mb-2">
                       <span className="text-xs sm:text-sm font-medium text-gray-900">{getCommentAuthorName(comment.userName)}</span>
                       <span className="text-[10px] sm:text-sm text-gray-500">
-                        {comment.createdAt ? (() => {
-                          try {
-                            const date = new Date(comment.createdAt);
-                            return !isNaN(date.getTime()) ? date.toLocaleDateString() : '날짜 없음';
-                          } catch (error) {
-                            return '날짜 없음';
-                          }
-                        })() : '날짜 없음'}
+                        {comment.createdAt ? formatDate(comment.createdAt) : 'No date'}
                       </span>
                     </div>
                     <p className="text-xs sm:text-sm text-gray-600">{comment.text}</p>
@@ -1014,7 +1425,10 @@ export default function CommunityPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               if (commentText.trim() && isSignedIn) {
-                submitComment();
+                // 직접 댓글 추가 핸들러 호출
+                handlePostComment(selectedPostId as string, commentText);
+                // 입력값 초기화
+                handleCommentTextChange('');
               }
             }} className="sticky bottom-0 bg-white border-t border-gray-100">
               <div className="px-4 sm:px-8 py-4 sm:py-6">
@@ -1030,7 +1444,9 @@ export default function CommunityPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey && isSignedIn && commentText.trim()) {
                         e.preventDefault();
-                        submitComment();
+                        // submitComment 대신 직접 handlePostComment 사용
+                        handlePostComment(selectedPostId as string, commentText);
+                        handleCommentTextChange('');
                       }
                     }}
                   />
@@ -1069,7 +1485,7 @@ export default function CommunityPage() {
           if (deleteModalState.type === 'post') {
             handleDeletePost(deleteModalState.postId);
           } else {
-            deleteComment(deleteModalState.postId, deleteModalState.commentId);
+            handleDeleteComment(deleteModalState.postId, String(deleteModalState.commentId));
           }
           setDeleteModalState({...deleteModalState, isOpen: false});
         }}

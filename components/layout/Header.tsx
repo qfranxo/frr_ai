@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,14 +23,52 @@ const NAVIGATION_ITEMS = [
   { name: 'Community', href: '/community' },
 ] as const;
 
-// 모바일 버튼 스타일 수정
-const mobileButtonClassName = "block w-full py-4 px-4 text-base text-center font-medium rounded-xl transition-all";
+// 네비게이션 항목 타입 정의
+type NavigationItem = typeof NAVIGATION_ITEMS[number];
 
-// 시작하기 버튼 스타일
-const gradientBtnClass = "h-10 px-5 text-sm font-medium bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:shadow-md transition-all duration-200";
+// 메모이제이션된 네비게이션 아이템 컴포넌트
+const NavItem = memo(({ item, pathname, onClick }: { 
+  item: NavigationItem, 
+  pathname: string | null,
+  onClick?: () => void 
+}) => (
+  <Link
+    href={item.href}
+    onClick={onClick}
+    className={cn(
+      "text-sm font-medium px-3 py-1.5 rounded-md transition-all duration-200",
+      pathname === item.href
+        ? 'text-blue-600 bg-blue-50'
+        : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50/50'
+    )}
+  >
+    {item.name}
+  </Link>
+));
 
-// 로그인 버튼 스타일
-const loginBtnClass = "text-gray-600 hover:text-gray-900 bg-transparent hover:bg-gray-100/50";
+NavItem.displayName = 'NavItem';
+
+// 메모이제이션된 모바일 네비게이션 아이템 컴포넌트
+const MobileNavItem = memo(({ item, pathname, onClick }: { 
+  item: NavigationItem, 
+  pathname: string | null,
+  onClick: () => void 
+}) => (
+  <Link
+    href={item.href}
+    onClick={onClick}
+    className={cn(
+      "block w-full p-0 text-sm bg-transparent px-3 py-2.5 rounded-md transition-all touch-manipulation text-left",
+      pathname === item.href
+        ? "text-blue-600 bg-blue-50"
+        : "text-gray-600 hover:text-blue-600 hover:bg-blue-50/50"
+    )}
+  >
+    {item.name}
+  </Link>
+));
+
+MobileNavItem.displayName = 'MobileNavItem';
 
 // 헤더 컴포넌트
 export default function Header() {
@@ -42,6 +80,16 @@ export default function Header() {
   const [language, setLanguage] = useState<'ko' | 'en'>('en');
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // 메뉴 토글 핸들러 메모이제이션
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(prev => !prev);
+  }, []);
+
+  // 메뉴 닫기 핸들러 메모이제이션
+  const closeMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(false);
+  }, []);
 
   // 외부 클릭 감지 핸들러
   useEffect(() => {
@@ -71,9 +119,17 @@ export default function Header() {
 
   // 스크롤 이벤트 핸들러 최적화
   useEffect(() => {
+    let ticking = false;
+    
     const handleScroll = () => {
-      const scrollPosition = window.scrollY;
-      setIsScrolled(scrollPosition > 10);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollPosition = window.scrollY;
+          setIsScrolled(scrollPosition > 10);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
     // 초기 상태 설정
@@ -86,9 +142,12 @@ export default function Header() {
 
   useEffect(() => {
     // 클라이언트 사이드에서만 언어 감지
-    const savedLang = localStorage.getItem('language') as 'ko' | 'en' || 
-                     (navigator.language.startsWith('ko') ? 'ko' : 'en');
-    setLanguage(savedLang);
+    const savedLang = localStorage.getItem('language');
+    const detectedLang = savedLang === 'ko' || savedLang === 'en' 
+      ? savedLang 
+      : (navigator.language.startsWith('ko') ? 'ko' : 'en');
+    
+    setLanguage(detectedLang);
   }, []);
 
   // 사용자가 로그인한 경우 설정 페이지 데이터 프리로딩
@@ -103,10 +162,10 @@ export default function Header() {
             cache: "force-cache"
           });
           
-          // 프리페치 완료 확인용 로그
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Settings data prefetched successfully');
-          }
+          // 프리페치 완료 확인용 로그 (주석 처리)
+          // if (process.env.NODE_ENV === 'development') {
+          //   console.log('Settings data prefetched successfully');
+          // }
         } catch (error) {
           // 프리페치 실패 시 조용히 무시 (UX에 영향 없음)
         }
@@ -121,6 +180,12 @@ export default function Header() {
     }
   }, [isSignedIn]);
 
+  // 모바일 메뉴 애니메이션 클래스 최적화 (계산 비용 줄이기)
+  const mobileMenuClasses = cn(
+    "md:hidden fixed left-0 right-0 top-16 bg-white/95 backdrop-blur-md border-t-0 transition-all duration-300 ease-in-out overflow-auto",
+    isMobileMenuOpen ? "opacity-100 visible max-h-[calc(100vh-4rem)]" : "opacity-0 invisible max-h-0"
+  );
+
   return (
     <header
       className={cn(
@@ -132,18 +197,8 @@ export default function Header() {
     >
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 md:h-16">
-          {/* 데스크톱 로고 추가 */}
-          <div className="hidden md:block">
-            <Link 
-              href="/" 
-              className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:scale-102 transition-transform"
-            >
-              Frr AI
-            </Link>
-          </div>
-
-          {/* 기존 모바일 로고 유지 (데스크톱에서 숨김 처리) */}
-          <div className="md:hidden flex items-center gap-3">
+          {/* 통합된 로고 */}
+          <div className="flex items-center gap-3">
             <Link 
               href="/" 
               className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:scale-102 transition-transform"
@@ -153,20 +208,9 @@ export default function Header() {
           </div>
 
           {/* 데스크톱 네비게이션 (중앙) */}
-          <nav className="hidden md:flex items-center gap-8 mx-auto justify-center flex-1">
+          <nav className="hidden md:flex items-center gap-6 mx-auto justify-center flex-1">
             {NAVIGATION_ITEMS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "text-sm font-medium px-3 py-1.5 rounded-lg transition-colors",
-                  pathname === item.href
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100/50'
-                )}
-              >
-                {item.name}
-              </Link>
+              <NavItem key={item.href} item={item} pathname={pathname} />
             ))}
           </nav>
 
@@ -177,10 +221,10 @@ export default function Header() {
                 <Link 
                   href="/settings/account"
                   prefetch={true}
-                  className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors text-gray-700"
+                  className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-all text-blue-600"
                   title="Settings"
                 >
-                  <span className="text-xl">🛠️</span>
+                  <span className="text-lg">🛠️</span>
                 </Link>
                 <div className="flex items-center gap-2">
                   <UserButton />
@@ -189,18 +233,10 @@ export default function Header() {
             ) : (
               <>
                 <SignInButton mode="modal">
-                  <Button 
-                    variant="ghost" 
-                    className={loginBtnClass}
-                  >
+                  <Button className="w-full py-2 text-blue-600 border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 hover:border-blue-300 transition-all duration-200 text-xs h-auto rounded-lg text-center">
                     Sign In
                   </Button>
                 </SignInButton>
-                <SignUpButton mode="modal">
-                  <Button className={gradientBtnClass}>
-                    Get Started
-                  </Button>
-                </SignUpButton>
               </>
             )}
           </div>
@@ -216,7 +252,7 @@ export default function Header() {
             <button 
               ref={buttonRef}
               className="p-3 touch-manipulation mr-8"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              onClick={toggleMobileMenu}
               aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
@@ -231,28 +267,18 @@ export default function Header() {
         {/* 모바일 메뉴 */}
         <div 
           ref={menuRef}
-          className={cn(
-            "md:hidden fixed left-0 right-0 top-16 bg-white/95 backdrop-blur-md border-t-0 transition-all duration-300 ease-in-out overflow-auto",
-            isMobileMenuOpen ? "opacity-100 visible max-h-[calc(100vh-4rem)]" : "opacity-0 invisible max-h-0"
-          )}
+          className={mobileMenuClasses}
         >
           <div className="container mx-auto px-2 py-2">
             <div className="py-4 space-y-3 w-[90%] max-w-[280px] ml-[5%] md:mx-auto">
               {/* 네비게이션 항목 */}
               {NAVIGATION_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={cn(
-                    "block w-full p-0 text-sm bg-transparent px-3 py-3 rounded-lg transition-colors touch-manipulation text-left",
-                    pathname === item.href
-                      ? "text-blue-600 bg-blue-50"
-                      : "text-gray-600 hover:text-blue-600 hover:bg-gray-100/50"
-                  )}
-                >
-                  {item.name}
-                </Link>
+                <MobileNavItem 
+                  key={item.href} 
+                  item={item} 
+                  pathname={pathname} 
+                  onClick={closeMobileMenu} 
+                />
               ))}
               
               {/* 로그인/시작하기 버튼 */}
@@ -262,11 +288,11 @@ export default function Header() {
                     <Link 
                       href="/settings/account"
                       prefetch={true}
-                      className="block w-full py-2.5 mb-2.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm rounded-lg text-center font-medium shadow-sm hover:shadow-md transition-all"
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block w-full py-2.5 mb-2.5 bg-blue-50 text-blue-600 text-sm rounded-md text-center font-medium hover:bg-blue-100 transition-all"
+                      onClick={closeMobileMenu}
                     >
                       <span className="flex items-center justify-center gap-2">
-                        <span className="text-xl">🛠️</span>
+                        <span className="text-lg">🛠️</span>
                         <span>Settings</span>
                       </span>
                     </Link>
@@ -274,15 +300,10 @@ export default function Header() {
                 ) : (
                   <div className="grid gap-2.5">
                     <SignInButton mode="modal">
-                      <Button className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm h-auto rounded-lg text-center">
+                      <Button className="w-full py-2 text-blue-600 border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 hover:border-blue-300 transition-all duration-200 text-xs h-auto rounded-lg text-center">
                         Sign In
                       </Button>
                     </SignInButton>
-                    <SignUpButton mode="modal">
-                      <Button className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:shadow-md text-sm h-auto rounded-lg text-center">
-                        Get Started
-                      </Button>
-                    </SignUpButton>
                   </div>
                 )}
               </div>

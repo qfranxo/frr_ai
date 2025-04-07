@@ -21,8 +21,8 @@ export async function GET() {
       return NextResponse.json({
         subscription: {
           tier: "starter", // 기본 스타터 플랜
-          maxGenerations: 3,
-          remaining: 3,
+          maxGenerations: 2,
+          remaining: 2,
           renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 현재 날짜 + 30일
         }
       });

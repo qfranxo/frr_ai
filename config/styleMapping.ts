@@ -42,16 +42,16 @@ export const modelStyleMapping = {
     'short_wave': 'short wavy hair, cropped waves, modern wavy bob, textured short waves, stylish short wavy cut'
   },
   eyes: {
-    '갈색': 'brown eyes, warm brown eyes, natural brown eyes, deep brown eyes, rich brown eyes',
-    '파란색': 'blue eyes, bright blue eyes, clear blue eyes, striking blue eyes, vibrant blue eyes',
-    '검은색': 'black eyes, dark eyes, deep black eyes, rich black eyes, intense black eyes',
-    '초록색': 'green eyes, emerald eyes, natural green eyes, bright green eyes, vivid green eyes',
-    '회색': 'gray eyes, steel gray eyes, cool gray eyes, light gray eyes, smoky gray eyes',
-    'brown': 'brown eyes, warm brown eyes, natural brown eyes, deep brown eyes, rich brown eyes',
-    'blue': 'blue eyes, bright blue eyes, clear blue eyes, striking blue eyes, vibrant blue eyes',
-    'black': 'black eyes, dark eyes, deep black eyes, rich black eyes, intense black eyes',
-    'green': 'green eyes, emerald eyes, natural green eyes, bright green eyes, vivid green eyes',
-    'gray': 'gray eyes, steel gray eyes, cool gray eyes, light gray eyes, smoky gray eyes'
+    '갈색': 'brown eyes, natural symmetrical brown eyes, warm brown eyes, detailed brown irises, natural eye reflections, lifelike brown eyes, perfect symmetrical eyes',
+    '파란색': 'blue eyes, natural symmetrical blue eyes, bright blue eyes, detailed blue irises, natural eye reflections, lifelike blue eyes, perfect symmetrical eyes',
+    '검은색': 'black eyes, natural symmetrical black eyes, deep black eyes, detailed black irises, natural eye reflections, lifelike black eyes, perfect symmetrical eyes',
+    '초록색': 'green eyes, natural symmetrical green eyes, emerald eyes, detailed green irises, natural eye reflections, lifelike green eyes, perfect symmetrical eyes',
+    '회색': 'gray eyes, natural symmetrical gray eyes, steel gray eyes, detailed gray irises, natural eye reflections, lifelike gray eyes, perfect symmetrical eyes',
+    'brown': 'brown eyes, natural symmetrical brown eyes, warm brown eyes, detailed brown irises, natural eye reflections, lifelike brown eyes, perfect symmetrical eyes',
+    'blue': 'blue eyes, natural symmetrical blue eyes, bright blue eyes, detailed blue irises, natural eye reflections, lifelike blue eyes, perfect symmetrical eyes',
+    'black': 'black eyes, natural symmetrical black eyes, deep black eyes, detailed black irises, natural eye reflections, lifelike black eyes, perfect symmetrical eyes',
+    'green': 'green eyes, natural symmetrical green eyes, emerald eyes, detailed green irises, natural eye reflections, lifelike green eyes, perfect symmetrical eyes',
+    'gray': 'gray eyes, natural symmetrical gray eyes, steel gray eyes, detailed gray irises, natural eye reflections, lifelike gray eyes, perfect symmetrical eyes'
   },
   cameraDistance: {
     'close_up': 'extreme close-up shot, highly detailed close shot, extreme close portrait, focus on subject, no background, studio lighting',

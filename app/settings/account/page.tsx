@@ -36,8 +36,8 @@ const CACHE_EXPIRY_TIME = 60 * 60 * 1000; // 1시간 캐시 유지
 // 기본 스타터 플랜 상수 정의
 const DEFAULT_STARTER_PLAN: SubscriptionInfo = {
   tier: 'starter',
-  maxGenerations: 3,
-  remaining: 3,
+  maxGenerations: 2,
+  remaining: 2,
   renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   startDate: new Date(),
   nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -50,6 +50,7 @@ export default function AccountSettingsPage() {
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialRender, setHasInitialRender] = useState(false);
+  const [isCanceled, setIsCanceled] = useState(false);
 
   // 페이지 마운트 시 기본 스타터 플랜 설정
   useEffect(() => {
@@ -454,7 +455,7 @@ export default function AccountSettingsPage() {
                   Upgrade to Premium
                 </Button>
                 <p className="text-[10px] sm:text-xs text-gray-500 mt-1 sm:mt-2">
-                  Get 100 generations per month with Premium
+                  Get 50 generations per month with Premium
                 </p>
               </div>
             </div>
@@ -465,9 +466,17 @@ export default function AccountSettingsPage() {
                   <DialogTrigger asChild>
                     <Button 
                       variant="outline" 
-                      className="text-xs text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 hover:bg-red-50 py-1 px-3 transition-all duration-300 rounded-lg w-auto self-end"
+                      className={`text-xs ${isCanceled 
+                        ? 'text-gray-400 border-gray-200 bg-gray-100' 
+                        : 'text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 hover:bg-red-50'
+                      } py-1 px-3 transition-all duration-300 rounded-lg w-auto self-end relative overflow-hidden group`}
                     >
-                      Cancel Subscription
+                      <span className="relative z-10 group-hover:scale-110 transition-transform duration-200">
+                        {isCanceled ? 'Subscription Canceled' : 'Cancel Subscription'}
+                      </span>
+                      {!isCanceled && (
+                        <span className="absolute inset-0 bg-gradient-to-r from-red-100 to-red-200 transform scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300"></span>
+                      )}
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="w-[90%] sm:w-[460px] max-w-full">
@@ -510,13 +519,16 @@ export default function AccountSettingsPage() {
                             const cancelToast = toast.loading("Processing your cancellation...");
                             // 여기에 실제 취소 API 호출 로직이 추가될 수 있음
                             
+                            // 구독 취소 상태 업데이트
+                            setIsCanceled(true);
+                            
                             // 성공 메시지로 토스트 업데이트
                             toast.success("Your subscription has been canceled. You will continue to have premium access until the end of your billing period.", {
                               id: cancelToast
                             });
                             /* Ideally update subscription state here */
                           }}
-                          className="text-xs sm:text-sm min-w-[120px]"
+                          className="text-xs sm:text-sm min-w-[120px] subscription-cancel-btn"
                         >
                           Cancel Subscription
                         </Button>

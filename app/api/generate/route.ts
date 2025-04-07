@@ -7,7 +7,14 @@ import { modelStyleMapping } from "@/config/styleMapping";
 // app/api/generate/route.ts
 import { db, isDatabaseConnected } from '@/lib/db'
 import { generations } from '@/db/migrations/schema'
-import { currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
+import { v4 as uuidv4 } from "uuid";
+import { storeImageFromReplicate } from "@/utils/image-storage";
+import { formDataApi } from '@/lib/api';
+import Image from "next/image";
+import { supabase } from "@/lib/supabase";
+import { isReplicateUrl, isValidImageUrl } from "@/utils/image-utils";
+import { generateEnhancedPrompt, generateNegativePrompt } from "@/utils/prompt";
 
 // 실제 Clerk의 auth 헬퍼 사용
 // function auth() {
@@ -20,6 +27,168 @@ import { currentUser } from '@clerk/nextjs/server';
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
+
+// UUID 유효성 검사 함수
+function isValidUUID(str: string | null | undefined) {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+// 개발 테스트용 ID 생성
+const testImageId = uuidv4(); // "550e8400-e29b-41d4-a716-446655440000" 형식
+
+// 스타일에 따른 카테고리 매핑 함수 추가
+function getCategoryFromStyle(style?: string, prompt?: string): string {
+  if (!style && !prompt) return 'portrait';
+  
+  const styleLower = style?.toLowerCase() || '';
+  const promptLower = prompt?.toLowerCase() || '';
+  
+  // 스타일에 따른 카테고리 매핑 테이블
+  const styleToCategory: { [key: string]: string } = {
+    // 애니메이션 스타일
+    'anime': 'anime',
+    'digital_illustration': 'anime',
+    'digital_illustration/pixel_art': 'anime',
+    'digital_illustration/hand_drawn': 'anime',
+    'digital_illustration/infantile_sketch': 'anime',
+    'cartoon': 'anime',
+    
+    // 포트레이트 스타일
+    'realistic': 'portrait',
+    'realistic_image': 'portrait',
+    'realistic_image/studio_portrait': 'portrait',
+    'realistic_image/natural_light': 'portrait',
+    'portrait': 'portrait',
+    'photo': 'portrait',
+    
+    // 풍경 스타일
+    'landscape': 'landscape',
+    'nature': 'landscape',
+    'scenery': 'landscape',
+    
+    // 도시 스타일
+    'city': 'urban',
+    'urban': 'urban',
+    'architecture': 'urban',
+    
+    // 판타지 스타일
+    'fantasy': 'fantasy',
+    'magical': 'fantasy',
+    'dragon': 'fantasy',
+    
+    // 미래적 스타일
+    'sci-fi': 'sci-fi',
+    'future': 'sci-fi',
+    'space': 'sci-fi',
+    'futuristic': 'sci-fi',
+    'cyber': 'sci-fi',
+    
+    // 빈티지 스타일
+    'vintage': 'vintage',
+    'retro': 'vintage',
+    'old style': 'vintage',
+    'classic': 'vintage',
+    'sepia': 'vintage',
+    'toned portrait': 'vintage',
+    'old fashioned': 'vintage',
+    'photograph style': 'vintage',
+    'vintage photograph': 'vintage',
+    'vintage photo': 'vintage',
+    'vintage style': 'vintage',
+    'retro style': 'vintage'
+  };
+  
+  // 정확한 매칭 먼저 시도
+  if (styleToCategory[styleLower]) {
+    return styleToCategory[styleLower];
+  }
+  
+  // 부분 매칭으로 카테고리 찾기
+  for (const [styleKey, category] of Object.entries(styleToCategory)) {
+    if (styleLower.includes(styleKey)) {
+      return category;
+    }
+  }
+  
+  // 프롬프트에서 카테고리 관련 키워드 찾기
+  const promptCategoryKeywords: { [key: string]: string } = {
+    // 애니메이션 키워드
+    'anime': 'anime',
+    '애니메이션': 'anime',
+    '만화': 'anime',
+    'cartoon': 'anime',
+    
+    // 풍경 키워드
+    '풍경': 'landscape',
+    '산': 'landscape',
+    '바다': 'landscape',
+    '자연': 'landscape',
+    'landscape': 'landscape',
+    'mountain': 'landscape',
+    'nature': 'landscape',
+    'ocean': 'landscape',
+    
+    // 도시 키워드
+    '도시': 'urban',
+    '건물': 'urban',
+    '거리': 'urban',
+    'city': 'urban',
+    'building': 'urban',
+    'street': 'urban',
+    
+    // 판타지 키워드
+    '판타지': 'fantasy',
+    '마법': 'fantasy',
+    '용': 'fantasy',
+    'fantasy': 'fantasy',
+    'magical': 'fantasy',
+    'dragon': 'fantasy',
+    
+    // 미래 키워드
+    '미래': 'sci-fi',
+    '우주': 'sci-fi',
+    '로봇': 'sci-fi',
+    'futuristic': 'sci-fi',
+    'space': 'sci-fi',
+    'robot': 'sci-fi',
+    
+    // 빈티지 키워드
+    '빈티지': 'vintage',
+    '복고': 'vintage',
+    '옛날': 'vintage',
+    'vintage': 'vintage',
+    'retro': 'vintage'
+  };
+  
+  // 프롬프트에서 키워드 찾기
+  for (const [keyword, category] of Object.entries(promptCategoryKeywords)) {
+    if (promptLower.includes(keyword)) {
+      return category;
+    }
+  }
+  
+  return 'portrait'; // 기본값
+}
+
+// 요청에서 비율 정보 추출하는 함수
+function getAspectRatioFromRequest(ratio: string | undefined, finalSize: string | undefined): string {
+  // ratio가 명시적으로 제공된 경우 사용
+  if (ratio) {
+    return ratio;
+  }
+  
+  // 크기 정보에서 비율 추출
+  if (finalSize) {
+    if (finalSize === "1024x1024") return "1:1";
+    if (finalSize === "1024x1820") return "9:16";
+    if (finalSize === "1820x1024") return "16:9";
+  }
+  
+  // 기본값으로 9:16 사용 (1:1 대신)
+  return "9:16";
+}
 
 export async function POST(request: Request) {
   // 디버깅을 위한 API 토큰 확인
@@ -38,10 +207,10 @@ export async function POST(request: Request) {
   let userName = "익명 사용자";
   
   // 로그인한 사용자인 경우에만 사용자 정보 가져오기
-  const user = await currentUser();
-  if (user) {
-    userId = user.id;
-    userName = user.firstName || user.username || '사용자';
+  const { userId: clerkUserId } = await auth();
+  if (clerkUserId) {
+    userId = clerkUserId;
+    userName = '사용자';
   }
 
   // DB 연결 상태 확인
@@ -54,7 +223,7 @@ export async function POST(request: Request) {
   let subscription = null;
 
   // 로그인한 사용자인 경우에만 사용량 제한 확인
-  if (dbConnected && user) {
+  if (dbConnected && clerkUserId) {
     try {
       const usageCheck = await canUserGenerate(userId);
       canGenerate = usageCheck.canGenerate;
@@ -109,7 +278,7 @@ export async function POST(request: Request) {
     
     console.log("적용된 이미지 크기:", finalSize);
     
-    // 프롬프트를 비율에 맞게 강화
+    // 프롬프트 강화 (기존 로직)
     let enhancedPrompt = prompt;
     
     // 의상 스타일 추가
@@ -122,7 +291,7 @@ export async function POST(request: Request) {
       enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.hair[hair as keyof typeof modelStyleMapping.hair]}`;
     }
     
-    // 눈 색상 추가
+    // 눈 색상 및 품질 향상 추가
     if (eyes) {
       enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.eyes[eyes as keyof typeof modelStyleMapping.eyes]}`;
     }
@@ -132,6 +301,15 @@ export async function POST(request: Request) {
       enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.cameraDistance[cameraDistance as keyof typeof modelStyleMapping.cameraDistance]}`;
     }
     
+    // 새로운 프롬프트 향상 함수 사용
+    enhancedPrompt = generateEnhancedPrompt(enhancedPrompt, {
+      style: style || 'realistic',
+      renderStyle: renderStyle || 'realistic'
+    });
+    
+    // 네거티브 프롬프트 생성
+    const negativePrompt = generateNegativePrompt(renderStyle);
+    
     // Request image generation using recraft-ai/recraft-v3 model
     const modelInfo: any = {
       model: "recraft-ai/recraft-v3",
@@ -139,6 +317,7 @@ export async function POST(request: Request) {
         prompt: enhancedPrompt, // 강화된 프롬프트 사용
         size: finalSize, // 비율에 맞는 사이즈 사용
         style: style,
+        negative_prompt: negativePrompt
       },
     };
     
@@ -184,81 +363,62 @@ export async function POST(request: Request) {
 
     // DB에 생성 기록 저장 (DB 연결이 있을 때만)
     if (result.status === "succeeded") {
-      console.log("이미지가 성공적으로 생성되었습니다. 이미지 URL:", result.output);
-
+      // 콘솔 로그 제거
+      
+      // 고유 ID 생성
+      const generationId = uuidv4();
+      
+      // 이미지 URL (Replicate의 출력)
+      const imageUrl = Array.isArray(result.output) && result.output.length > 0 
+        ? result.output[0] 
+        : (result.output || null); // null을 명시적으로 설정
+      
+      // 이미지 URL이 없으면 오류 반환
+      if (!isValidImageUrl(imageUrl)) {
+        return NextResponse.json(
+          { error: "이미지 생성 결과가 없습니다." },
+          { status: 500 }
+        );
+      }
+      
+      // Supabase Storage에 이미지 저장 (모든 경우 저장)
+      let storageUrl = imageUrl;
+      let storagePath = '';
+      
+      // 이미지 스토리지 저장 부분 제거 - 공유할 때만 저장하도록 수정
+      // 이미지 URL은 그대로 Replicate에서 제공한 URL 사용
+      
       // DB 저장 대신 생성 결과 반환 (클라이언트에서 로컬 스토리지에 저장)
       const generatedImage = {
-        id: `img_${Date.now()}`,
-        imageUrl: result.output,
+        id: generationId,
+        imageUrl: imageUrl, // 원본 Replicate URL 사용
         prompt: prompt,
-        aspectRatio: ratio,
+        aspectRatio: getAspectRatioFromRequest(ratio, finalSize),
         renderingStyle: renderStyle || style || 'standard',
         gender: gender || 'none',
         age: age || 'none',
-        createdAt: new Date().toISOString()
+        category: getCategoryFromStyle(renderStyle || style, prompt) || 'portrait', // 카테고리 필드 추가
+        createdAt: new Date().toISOString(),
+        storagePath: '', // 저장 경로 없음
+        original_generation_id: isValidUUID(generationId) ? generationId : null,
       };
+      
+      // 사용량 증가 처리 (DB 연결이 있을 때만)
+      if (dbConnected && clerkUserId) {
+        try {
+          await incrementUserGenerations(userId);
+          console.log("사용량 증가 완료.");
+        } catch (usageError) {
+          console.error("사용량 업데이트 중 오류 발생:", usageError);
+          // 사용량 업데이트 실패해도 계속 진행
+        }
+      }
       
       // DB 연결 여부와 상관없이 이미지 생성 결과 반환
       return NextResponse.json({
         ...result,
         generatedImage
       });
-
-      // 아래 DB 관련 코드는 주석 처리
-      /* 
-      if (dbConnected) {
-        try {
-          // 사용량 증가 (DB 연결이 있을 때만)
-          await incrementUserGenerations(userId);
-          console.log("사용량 증가 완료.");
-          
-          // DB에 생성 기록 저장
-          try {
-            await db.insert(generations).values({
-              userId: userId,
-              userName: userName,
-              imageUrl: result.output,
-              prompt: prompt,
-              aspectRatio: ratio,
-              renderingStyle: renderStyle,
-              gender: gender,
-              age: age,
-              background: background,
-              skinType: skinType,
-              eyeColor: eyeColor,
-              hairStyle: hairStyle,
-              isShared: false,
-            });
-            console.log("DB에 생성 기록 저장 완료.");
-          } catch (dbError) {
-            console.error("DB에 생성 기록 저장 중 오류 발생:", dbError);
-            // DB 저장 실패해도 결과는 반환
-          }
-          
-          // 업데이트된 사용량 정보 가져오기
-          const updatedRemaining = remaining - 1;
-          subscription = await getUserSubscription(userId);
-          
-          return NextResponse.json({
-            ...result,
-            subscription: {
-              tier: subscription.tier,
-              maxGenerations: subscription.maxGenerations,
-              remaining: updatedRemaining,
-              renewalDate: subscription.renewalDate
-            }
-          });
-        } catch (usageError) {
-          console.error("사용량 업데이트 중 오류 발생:", usageError);
-          // 사용량 업데이트 실패해도 결과는 반환
-          return NextResponse.json(result);
-        }
-      } else {
-        // DB 연결이 없으면 결과만 반환
-        console.log("DB 연결이 없어 사용량 및 생성 기록 저장을 건너뜁니다.");
-        return NextResponse.json(result);
-      }
-      */
     }
 
     // 기본 응답
@@ -267,12 +427,22 @@ export async function POST(request: Request) {
     console.error("Error generating image:", error);
     
     // Replicate API 월별 지출 한도 오류 처리
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = {
+      type: typeof error,
+      isError: error instanceof Error,
+      name: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error || 'Unknown error'),
+      stack: error instanceof Error ? error.stack : undefined,
+      stringValue: typeof error?.toString === 'function' ? error.toString() : 'Cannot convert to string',
+      rawValue: error
+    };
+    
+    console.error('🔴 이미지 생성 중 오류:', errorDetails);
     
     if (
-      errorMessage.includes("Monthly spend limit reached") || 
-      errorMessage.includes("Payment Required") ||
-      errorMessage.includes("402")
+      errorDetails.message.includes("Monthly spend limit reached") || 
+      errorDetails.message.includes("Payment Required") ||
+      errorDetails.message.includes("402")
     ) {
       return NextResponse.json(
         { 
@@ -283,7 +453,7 @@ export async function POST(request: Request) {
     }
     
     return NextResponse.json(
-      { error: `이미지 생성 중 오류 발생: ${errorMessage}` },
+      { error: errorDetails.message },
       { status: 500 }
     );
   }

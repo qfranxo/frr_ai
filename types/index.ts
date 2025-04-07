@@ -25,9 +25,11 @@ export interface IPost {
 export interface IComment {
   id: number | string;
   text: string;
+  content?: string;
   author: string;
   createdAt: string;
   userId?: string;
+  userName?: string;
 }
 
 export interface IUser {
@@ -38,10 +40,10 @@ export interface IUser {
 
 // InteractionButtons 인터페이스
 export interface IInteractionButtons {
-  likes: number;
+  likes?: number;
   comments: IComment[];
   isLiked?: boolean;
-  onLike: () => void;
+  onLike?: () => void;
   onComment: () => void;
 }
 
@@ -86,7 +88,7 @@ export interface IPostCard {
     } | string;
     category?: string;
     tags?: string[];
-    likes: number;
+    likes?: number;
     comments: IComment[];
     createdAt: string;
     prompt?: string;
@@ -95,11 +97,11 @@ export interface IPostCard {
     timestamp?: string;
     selectedCategory?: string;
   };
-  onLike: (postId: number | string) => void;
+  onLike?: (postId: number | string) => void;
   onComment: (text: string) => void;
   onDeleteComment: (postId: number | string, commentId: number | string) => void;
-  isLiked: boolean;
-  likesCount: number;
+  isLiked?: boolean;
+  likesCount?: number;
   currentComments: IComment[];
   imageClassName?: string;
   currentUser?: {
@@ -118,6 +120,7 @@ export interface IFeatureSection {
 
 export interface IModelOptions {
   style: string;
+  renderStyle?: string;
 }
 
 export interface IGenerateRequest {

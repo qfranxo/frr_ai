@@ -1,77 +1,74 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useState } from 'react'
+import { useUser } from '@clerk/nextjs'
+import { useAddComment } from '@/hooks/useCommentsBatch'
 
-const supabase = createClientComponentClient();
-
-type CommentInputProps = {
-  imageId: string;
-  onCommentPosted?: () => void;
-};
+interface CommentInputProps {
+  imageId: string
+  onCommentPosted?: () => void
+}
 
 export default function CommentInput({ imageId, onCommentPosted }: CommentInputProps) {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const [text, setText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [comment, setComment] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { user, isSignedIn } = useUser()
+  
+  // 댓글 추가 mutation 훅 사용
+  const addComment = useAddComment()
 
-  // ✅ 댓글 등록 함수
-  const handleSubmit = async () => {
-    if (!isLoaded || !isSignedIn || !user) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!comment.trim() || !imageId || isSubmitting) return
+    
+    if (!isSignedIn) {
+      alert('댓글을 작성하려면 로그인이 필요합니다.')
+      return
+    }
     
     try {
-      setIsSubmitting(true);
+      setIsSubmitting(true)
       
-      // 유저 이름을 직접 가져와서 사용
-      const userName = 
-        user.fullName || 
-        user.username || 
-        user.primaryEmailAddress?.emailAddress?.split("@")[0] || 
-        "User";
-
-      const { error } = await supabase.from("shared_comments").insert({
-        image_id: imageId,
-        user_id: user.id,
-        user_name: userName, // 상태가 아닌 직접 계산된 값 사용
-        text,
-      });
-
-      if (error) {
-        console.error("❌ 댓글 저장 실패:", error.message);
-      } else {
-        console.log("✅ 댓글 저장 완료");
-        setText("");
-        if (onCommentPosted) {
-          onCommentPosted();
-        }
+      // React Query mutation 사용
+      await addComment.mutateAsync({
+        imageId,
+        userId: user?.id || 'anonymous',
+        userName: user?.firstName || user?.username || '사용자',
+        text: comment
+      })
+      
+      // 입력 필드 초기화
+      setComment('')
+      
+      // 콜백 실행
+      if (onCommentPosted) {
+        onCommentPosted()
       }
-    } catch (err) {
-      console.error("댓글 저장 중 오류 발생:", err);
+    } catch (error) {
+      console.error('댓글 추가 오류:', error)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
-
-  // 버튼 비활성화 조건
-  const isButtonDisabled = !text.trim() || !isLoaded || !isSignedIn || isSubmitting;
+  }
 
   return (
-    <div className="flex gap-2 items-center">
+    <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
       <input
-        className="w-full border p-2 rounded"
-        placeholder={isLoaded && isSignedIn ? "Write a comment..." : "Sign in to comment"}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        disabled={!isLoaded || !isSignedIn}
+        type="text"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="댓글을 입력하세요..."
+        disabled={isSubmitting}
+        className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
       />
       <button
-        className="bg-indigo-600 text-white p-2 rounded disabled:opacity-50"
-        onClick={handleSubmit}
-        disabled={isButtonDisabled}
+        type="submit"
+        disabled={!comment.trim() || isSubmitting}
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isSubmitting ? "..." : "💬"}
+        {isSubmitting ? '게시 중...' : '게시'}
       </button>
-    </div>
-  );
+    </form>
+  )
 } 

@@ -2,9 +2,11 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import Header from "@/components/layout/Header";
-import { Toaster } from 'sonner';
+import ClientFooter from "@/components/layout/ClientFooter";
 import GeistWrapper from "@/components/providers/GeistProvider";
 import Script from "next/script";
+import { BlobAnimation } from "@/components/ui/blob-animation";
+import ToasterProvider from "@/components/providers/ToasterProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,6 +15,8 @@ export const metadata = {
   description: "AI 모델로 나를 만들어보세요",
 };
 
+// Next.js 15에서는 정적 사이트 생성 시 서버 컴포넌트에서 현재 경로를 알기 어렵습니다.
+// 대신 NEXT_PUBLIC_BYPASS_CLERK 환경 변수로 클라이언트에서 전체 처리합니다.
 export default function RootLayout({
   children,
 }: {
@@ -21,24 +25,30 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="ko" suppressHydrationWarning>
-        <body className={inter.className}>
-          <GeistWrapper>
-            <Header />
-            <main className="flex-grow">
-              {children}
-            </main>
-          </GeistWrapper>
-          <Toaster 
-            position="top-center"
-            toastOptions={{
-              // 중복 방지 설정
-              closeButton: true,
-              duration: 3000,
-            }}
-            // 토스트를 겹치지 않고 위로 쌓기
-            richColors 
-            closeButton
+        <head>
+          {/* Font Awesome 추가 */}
+          <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw=="
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
           />
+        </head>
+        <body className={inter.className}>
+          {/* 전역 배경 애니메이션 - 한 번만 로드됨 */}
+          <BlobAnimation />
+          
+          <GeistWrapper>
+            <div className="min-h-screen flex flex-col relative z-10">
+              <Header />
+              <main className="flex-grow">
+                {children}
+              </main>
+              <ClientFooter />
+            </div>
+          </GeistWrapper>
+          <ToasterProvider />
           <Script id="scroll-handler" strategy="afterInteractive">
             {`
               (function() {

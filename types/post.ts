@@ -3,6 +3,7 @@ import { StyleOption } from './generate';
 export interface Comment {
   id: number | string;
   text: string;
+  content?: string;
   author: string;
   createdAt: string;
   imageId?: string;
@@ -21,7 +22,7 @@ export interface CommunityPost {
   style?: StyleOption;
   category?: string;
   tags: string[];
-  likes: number;
+  likes?: number;
   comments: Comment[];
   createdAt: string;
   userId?: string;

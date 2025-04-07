@@ -6,6 +6,18 @@ import { eq, desc } from 'drizzle-orm';
 import { generations } from '@/db/migrations/schema';
 import { db } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@supabase/supabase-js';
+import { revalidatePath } from 'next/cache';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { Webhook } from 'svix';
+import { headers } from 'next/headers';
+import { WebhookEvent } from '@clerk/nextjs/server';
+
+// Supabase 클라이언트 초기화
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+);
 
 // 공유 이미지 타입 정의
 interface SharedImage {
@@ -23,6 +35,7 @@ interface SharedImage {
   likes?: number;
   comments?: Comment[];
   isLiked?: boolean;
+  originalGenerationId?: string | null;
 }
 
 // 댓글 타입 정의
@@ -47,129 +60,7 @@ function ensureDirectoryExists() {
 }
 
 // 초기 데이터
-const initialSharedImages: SharedImage[] = [
-  {
-    id: 'mock-1',
-    userId: 'business_style',
-    imageUrl: 'https://replicate.delivery/pbxt/4EbhJzpPly8SWqRdiiM54NvUcyhhnDKkcL4D9H5HzWlKhbHjA/out-0.png',
-    prompt: 'Professional female portrait with business attire and natural office lighting',
-    aspectRatio: '1:1',
-    renderingStyle: 'realistic',
-    gender: 'female',
-    age: '30',
-    category: 'portrait',
-    createdAt: new Date().toISOString(),
-    likes: 0,
-    comments: [
-      {
-        id: 'comment-1',
-        imageId: 'mock-1',
-        userId: 'user123',
-        userName: '마케터',
-        text: '우리 브랜드와 잘 어울릴 것 같아요!',
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-      }
-    ]
-  },
-  {
-    id: 'mock-2',
-    userId: 'daily_look',
-    imageUrl: 'https://replicate.delivery/pbxt/0RUkJcPMsGqRAoiEJCpVCZjEwlTsWOwL9ZMOSs2gGwQm4VJjA/out-0.png',
-    prompt: 'Young man in casual attire with black hat, natural daylight',
-    aspectRatio: '1:1',
-    renderingStyle: 'natural',
-    gender: 'male',
-    age: '25',
-    category: 'portrait',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    likes: 0,
-    comments: [
-      {
-        id: 'comment-2',
-        imageId: 'mock-2',
-        userId: 'user456',
-        userName: '패션디자이너',
-        text: '이 스타일 정말 트렌디하네요!',
-        createdAt: new Date(Date.now() - 7200000).toISOString(),
-      },
-      {
-        id: 'comment-3',
-        imageId: 'mock-2',
-        userId: 'user789',
-        userName: '사진작가',
-        text: '조명이 매우 자연스럽게 표현되었네요.',
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-      }
-    ]
-  },
-  {
-    id: 'mock-3',
-    userId: 'luxury_style',
-    imageUrl: 'https://replicate.delivery/pbxt/Xacn3TuVIpVUjTVqkdoeoXw8UDqq8mWKG2jOXww5mf47gbE/out-0.png',
-    prompt: 'Elegant female fashion portrait with luxurious styling, dramatic studio lighting',
-    aspectRatio: '1:1',
-    renderingStyle: 'high_fashion',
-    gender: 'female',
-    age: '27',
-    category: 'portrait',
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    likes: 0,
-    comments: [
-      {
-        id: 'comment-4',
-        imageId: 'mock-3',
-        userId: 'user101',
-        userName: '패션에디터',
-        text: '럭셔리 브랜드 화보에 어울리는 분위기예요.',
-        createdAt: new Date(Date.now() - 5000000).toISOString(),
-      },
-      {
-        id: 'comment-5',
-        imageId: 'mock-3',
-        userId: 'user202',
-        userName: '메이크업아티스트',
-        text: '메이크업과 조명이 정말 완벽한 조합이네요!',
-        createdAt: new Date(Date.now() - 3000000).toISOString(),
-      },
-      {
-        id: 'comment-6',
-        imageId: 'mock-3',
-        userId: 'user303',
-        userName: '스타일리스트',
-        text: '이런 스타일 정말 좋아합니다.',
-        createdAt: new Date(Date.now() - 2000000).toISOString(),
-      }
-    ]
-  },
-  {
-    id: 'mock-4',
-    userId: 'urban_explorer',
-    imageUrl: 'https://replicate.delivery/pbxt/HPVJ4LQqpEGn21YkAkMmlGsL8BDEFkRxQsRnvBVATZWk8TXjA/out-0.png',
-    prompt: 'Modern cityscape with futuristic skyscrapers and neon lighting',
-    aspectRatio: '16:9',
-    renderingStyle: 'artistic',
-    gender: 'neutral',
-    age: '35',
-    category: 'urban',
-    createdAt: new Date(Date.now() - 10800000).toISOString(),
-    likes: 0,
-    comments: []
-  },
-  {
-    id: 'mock-5',
-    userId: 'anime_artist',
-    imageUrl: 'https://replicate.delivery/pbxt/Xd1ZmwKBdJxppZqR05K1b8F4gvVRrLW4iTBE1eN3Y7jkgbHjA/out-0.png',
-    prompt: 'Anime style character with vibrant colors and fantasy background',
-    aspectRatio: '1:1',
-    renderingStyle: 'anime',
-    gender: 'female',
-    age: '20',
-    category: 'anime',
-    createdAt: new Date(Date.now() - 14400000).toISOString(),
-    likes: 0,
-    comments: []
-  }
-];
+const initialSharedImages: SharedImage[] = [];
 
 // 파일에서 데이터 읽기
 function readSharedImages(): SharedImage[] {
@@ -215,7 +106,14 @@ function invalidateCache() {
 
 // 이미지 URL 유효성 확인 함수 추가
 function isValidImageUrl(url: string | null | undefined): boolean {
-  return Boolean(url && url.startsWith('https://replicate.delivery/'));
+  if (!url) return false;
+  return url.startsWith('http') && url.length > 10;
+}
+
+// Replicate URL 확인 함수
+function isReplicateUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return url.includes('replicate.delivery');
 }
 
 // 공유 이미지 데이터 가져오기
@@ -258,9 +156,24 @@ async function getSharedImages(): Promise<SharedImage[]> {
       console.log("Supabase 연결 시도 중...");
       
       // 1. 이미지 데이터 가져오기
-      const { data: imagesData, error: imagesError } = await supabase
+      const { data: imagesData, error: imagesError } = await supabaseClient
         .from('shared_images')
-        .select('id, user_id, user_name, image_url, prompt, aspect_ratio, rendering_style, gender, age, category, created_at, like_count, likes, comments_count')
+        .select(`
+          id,
+          prompt,
+          user_id,
+          image_url,
+          category,
+          rendering_style,
+          aspect_ratio,
+          created_at,
+          likes,
+          comments,
+          userName,
+          gender,
+          age,
+          original_generation_id
+        `)
         .order('created_at', { ascending: false });
       
       if (imagesError) {
@@ -275,7 +188,7 @@ async function getSharedImages(): Promise<SharedImage[]> {
         supabaseImages = imagesData.map(image => ({
           id: image.id,
           userId: image.user_id,
-          userName: image.user_name || "사용자",
+          userName: image.userName || "사용자",
           imageUrl: image.image_url,
           prompt: image.prompt || "",
           aspectRatio: image.aspect_ratio || "1:1",
@@ -284,12 +197,13 @@ async function getSharedImages(): Promise<SharedImage[]> {
           age: image.age || "adult",
           category: image.category || "other",
           createdAt: image.created_at || new Date().toISOString(),
-          likes: image.likes || image.like_count || 0,
+          originalGenerationId: image.original_generation_id || null,
+          likes: image.likes || 0,
           comments: []
         }));
         
         // 2. 댓글 데이터 가져오기
-        const { data: commentsData, error: commentsError } = await supabase
+        const { data: commentsData, error: commentsError } = await supabaseClient
           .from('comments')
           .select('*')
           .order('created_at', { ascending: true });
@@ -406,22 +320,20 @@ async function addSharedImage(newImage: SharedImage): Promise<SharedImage> {
     
     // Supabase에 저장 시도
     console.log("Attempting to save to Supabase...");
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('shared_images')
-      .insert({
-        id: newImage.id,
-        user_id: newImage.userId,
-        user_name: newImage.userName, // 사용자 이름도 저장
-        image_url: newImage.imageUrl,
-        prompt: newImage.prompt,
-        aspect_ratio: newImage.aspectRatio,
-        rendering_style: newImage.renderingStyle,
-        gender: newImage.gender,
-        age: newImage.age,
-        category: newImage.category,
-        created_at: newImage.createdAt,
-        likes: 0
-      })
+      .insert([
+        {
+          prompt: newImage.prompt,
+          image_url: newImage.imageUrl,
+          user_id: newImage.userId,
+          category: newImage.category,
+          rendering_style: newImage.renderingStyle,
+          aspect_ratio: newImage.aspectRatio,
+          likes: [],
+          comments: []
+        }
+      ])
       .select()
       .single();
     
@@ -445,8 +357,8 @@ async function addSharedImage(newImage: SharedImage): Promise<SharedImage> {
     // 데이터를 올바른 형식으로 변환
     const formattedData: SharedImage = {
       id: data.id,
-      userId: data.user_id || newImage.userId,
-      userName: data.user_name || newImage.userName,
+      userId: data.user_id,
+      userName: data.userName || newImage.userName,
       imageUrl: data.image_url || newImage.imageUrl,
       prompt: data.prompt || newImage.prompt,
       aspectRatio: data.aspect_ratio || newImage.aspectRatio,
@@ -456,7 +368,8 @@ async function addSharedImage(newImage: SharedImage): Promise<SharedImage> {
       category: data.category || newImage.category,
       createdAt: data.created_at || newImage.createdAt,
       likes: data.likes || 0,
-      comments: []
+      comments: [],
+      originalGenerationId: data.original_generation_id || null
     };
     
     return formattedData;
@@ -493,85 +406,68 @@ function addLocalSharedImage(newImage: SharedImage): SharedImage {
 }
 
 // 좋아요 추가/삭제
-async function toggleLike(imageId: string, userId: string, isLiked: boolean, increment: number = 1): Promise<boolean> {
+async function toggleLike(imageId: string, userId: string, isLiked: boolean) {
   try {
-    console.log(`Toggling like: imageId=${imageId}, userId=${userId}, isLiked=${isLiked}, increment=${increment}`);
+    console.log(`좋아요 토글: image=${imageId}, user=${userId}, isLiked=${isLiked}`);
     
-    // 접두사 제거하여 순수 ID 얻기
+    // "shared-" 접두사 제거
     const pureImageId = imageId.replace('shared-', '');
     
-    // 요청한 사용자 ID 설정 (RLS 정책용)
-    await supabase.rpc('set_current_user_id', { user_id: userId });
+    // Supabase 클라이언트에 사용자 ID 설정 (RLS 정책용)
+    await supabaseClient.rpc('set_current_user_id', { user_id: userId });
     
-    // 1. 좋아요 상태 처리 
-    if (isLiked) {
-      // 좋아요 삭제
-      console.log(`Removing like for image ${pureImageId} by user ${userId}`);
-      const { error: likeError } = await supabase
-        .from('likes')
-        .delete()
-        .match({ image_id: pureImageId, user_id: userId });
-      
-      if (likeError) {
-        console.error('Error removing like record:', likeError);
-      }
-    } else {
-      // 좋아요 추가 - 중복 체크 없이 바로 추가
-      console.log(`Adding like for image ${pureImageId} by user ${userId}`);
-      const { error: likeError } = await supabase
-        .from('likes')
-        .insert({ 
-          image_id: pureImageId, 
-          user_id: userId 
-        });
-      
-      if (likeError) {
-        console.error('Error adding like record:', likeError);
-      }
-    }
-    
-    // 2. 좋아요 수 업데이트 - 현재 숫자를 직접 가져와서 증감
-    const { count, error: countError } = await supabase
-      .from('likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('image_id', pureImageId);
-    
-    if (countError) {
-      console.error('Error counting likes:', countError);
-      return toggleLocalLike(imageId, isLiked, increment);
-    }
-    
-    // 좋아요 수 업데이트
-    const currentCount = count || 0;
-    console.log(`Current like count for image ${pureImageId}: ${currentCount}`);
-    
-    const { error: updateError } = await supabase
+    // 이미지 조회
+    const { data: existingImage, error: getError } = await supabaseClient
       .from('shared_images')
-      .update({ 
-        likes: currentCount,
-        like_count: currentCount
+      .select('id, likes')
+      .eq('id', pureImageId)
+      .single();
+    
+    if (getError) {
+      console.error('이미지 조회 오류:', getError);
+      return toggleLocalLike(imageId, isLiked);
+    }
+    
+    // 좋아요 배열 처리
+    let likes = Array.isArray(existingImage.likes) ? [...existingImage.likes] : [];
+    
+    if (isLiked) {
+      // 좋아요 취소
+      likes = likes.filter(id => id !== userId);
+    } else {
+      // 좋아요 추가
+      if (!likes.includes(userId)) {
+        likes.push(userId);
+      }
+    }
+    
+    // 이미지 업데이트
+    const { data, error: updateError } = await supabaseClient
+      .from('shared_images')
+      .update({
+        likes: likes
       })
       .eq('id', pureImageId);
     
     if (updateError) {
-      console.error('Error updating like count:', updateError);
-      return toggleLocalLike(imageId, isLiked, increment);
+      console.error('이미지 업데이트 오류:', updateError);
+      return toggleLocalLike(imageId, isLiked);
     }
     
-    console.log(`Like count updated for image ${pureImageId}: ${currentCount}`);
+    console.log(`좋아요 업데이트 완료: image=${pureImageId}, count=${likes.length}`);
     
-    // 캐시 무효화 - 좋아요 상태가 변경되었으므로 항상 캐시 무효화
+    // 캐시 무효화
     invalidateCache();
     
     return true;
   } catch (error) {
-    console.error('Error toggling like:', error);
-    return toggleLocalLike(imageId, isLiked, increment);
+    console.error('좋아요 토글 오류:', error);
+    return toggleLocalLike(imageId, isLiked);
   }
 }
 
 // 로컬 저장소에서 좋아요 토글 (폴백)
-function toggleLocalLike(imageId: string, isLiked: boolean, increment: number = 1): boolean {
+function toggleLocalLike(imageId: string, isLiked: boolean): boolean {
   const images = getLocalSharedImages();
   const imageIndex = images.findIndex(img => img.id === imageId);
   
@@ -580,10 +476,10 @@ function toggleLocalLike(imageId: string, isLiked: boolean, increment: number = 
   // 좋아요 토글
   if (isLiked) {
     // 좋아요 취소 (1씩 감소)
-    images[imageIndex].likes = (images[imageIndex].likes || 0) - increment;
+    images[imageIndex].likes = (images[imageIndex].likes || 0) - 1;
   } else {
     // 좋아요 추가 (1씩 증가)
-    images[imageIndex].likes = (images[imageIndex].likes || 0) + increment;
+    images[imageIndex].likes = (images[imageIndex].likes || 0) + 1;
   }
   
   // 음수 방지
@@ -607,10 +503,10 @@ async function addComment(imageId: string, userId: string, userName: string, tex
     const pureImageId = imageId.replace('shared-', '');
     
     // 요청한 사용자 ID 설정 (RLS 정책용)
-    await supabase.rpc('set_current_user_id', { user_id: userId });
+    await supabaseClient.rpc('set_current_user_id', { user_id: userId });
     
     // Supabase에 댓글 추가 - 올바른 테이블과 필드 이름 사용
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('comments')
       .insert({
         image_id: pureImageId,  // image_id 필드
@@ -758,245 +654,467 @@ function categorizeImage(prompt: string, renderingStyle: string): string {
 // 간소화된 커뮤니티 API
 export async function GET(request: Request) {
   try {
-    // URL 파싱 오류 방지
-    let shouldInvalidateCache = false;
+    console.log('Community API 요청 받음');
+    
+    // Supabase 연결 상태 확인
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.log('Supabase 설정 누락됨, 로컬 데이터 사용');
+      const localData = getLocalSharedImages();
+      return NextResponse.json({ success: true, data: localData });
+    }
+    
+    // 현재 로그인한 사용자 정보 가져오기
+    const authInfo = await auth();
+    const userId = authInfo?.userId;
+    
+    // Supabase에서 공유된 이미지 가져오기
     try {
-      const url = new URL(request.url);
-      process.env.NEXT_PUBLIC_REQUEST_URL = request.url;
+      console.log('Supabase에서 이미지 데이터 조회 시작');
       
-      // 타임스탬프 또는 강제 새로고침 파라미터 확인
-      if (url.searchParams.has('t') || url.searchParams.has('force_refresh')) {
-        console.log("타임스탬프/강제 새로고침 파라미터 감지됨 - 캐시 초기화");
-        shouldInvalidateCache = true;
+      // 모든 이미지 가져오기 (필터링 제거)
+      const { data: sharedImages, error } = await supabase
+        .from('shared_images')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Supabase 조회 오류:', error);
+        throw error;
       }
-    } catch (urlError) {
-      console.warn("URL 파싱 중 오류 발생:", urlError);
-      // URL 파싱 오류가 발생해도 계속 진행
+      
+      if (!sharedImages || sharedImages.length === 0) {
+        console.log('Supabase에 데이터 없음, 샘플 데이터 반환');
+        return NextResponse.json({ success: true, data: initialSharedImages });
+      }
+      
+      console.log(`Supabase에서 ${sharedImages.length}개 이미지 조회됨`);
+
+      // 현재 로그인한 사용자가 좋아요한 이미지 ID 목록 가져오기
+      const liked: Record<string, boolean> = {};
+      
+      if (userId) {
+        try {
+          const { data: likedData, error: likedError } = await supabase
+            .from('user_likes')
+            .select('image_id')
+            .eq('user_id', userId);
+          
+          if (!likedError && likedData) {
+            likedData.forEach(item => {
+              if (item.image_id) {
+                liked[item.image_id] = true;
+              }
+            });
+          }
+        } catch (likeError) {
+          console.error('좋아요 데이터 조회 오류:', likeError);
+        }
+      }
+
+      // 이미지 데이터 포맷팅
+      const formattedData = sharedImages.map(image => {
+        // 2. 이미지 URL 확인 및 보정
+        let imageUrl = image.image_url || '';
+
+        if (!imageUrl) {
+          imageUrl = '/fallback-image.png'; // 이미지 URL이 없는 경우
+        } else if (isReplicateUrl(imageUrl)) {
+          // Replicate URL 그대로 사용 (자동 저장 기능이 처리)
+          console.log(`Replicate URL 발견, 원본 URL 사용: ID=${image.id}`);
+        } else if (!isValidImageUrl(imageUrl)) {
+          console.log(`유효하지 않은 URL: ID=${image.id}`);
+          imageUrl = '/fallback-image.png'; // 유효하지 않은 URL 경우
+        }
+        
+        return {
+          id: image.id,
+          userId: image.user_id,
+          userName: image.user_name,
+          imageUrl: imageUrl,
+          prompt: image.prompt,
+          aspectRatio: image.aspect_ratio || '1:1',
+          renderingStyle: image.rendering_style,
+          gender: image.gender,
+          age: image.age,
+          category: image.category || 'portrait',
+          createdAt: image.created_at,
+          likes: (image.likes || []).length,
+          isLiked: userId ? liked[image.id] || false : false,
+          comments: [],
+          originalGenerationId: image.original_generation_id || null
+        };
+      });
+      
+      return NextResponse.json({ success: true, data: formattedData });
+    } catch (error: any) {
+      console.error('Supabase 데이터 조회 실패:', error);
+      console.error('에러 상세 정보:', JSON.stringify({
+        message: error.message,
+        name: error.name,
+        cause: error.cause
+      }));
+      
+      // Supabase 오류 시 로컬 데이터 반환
+      console.log('로컬 데이터로 폴백');
+      const localData = getLocalSharedImages();
+      return NextResponse.json({ 
+        success: true, 
+        data: localData,
+        error: 'Supabase 조회 실패, 로컬 데이터 반환됨'
+      });
     }
+  } catch (error: any) {
+    console.error('Community API 오류:', error);
+    console.error('스택 트레이스:', error.stack || '스택 없음');
     
-    // 캐시 무효화가 필요한 경우
-    if (shouldInvalidateCache) {
-      invalidateCache();
-    }
-    
-    // 공유 이미지 데이터 가져오기
-    const sharedImages = await getSharedImages();
-    
-    return NextResponse.json({
-      success: true,
-      data: sharedImages,
-      timestamp: new Date().toISOString(),
-      source: sharedImagesCache ? 'cache' : 'fresh'
-    });
-  } catch (error) {
-    console.error('GET 요청 처리 오류:', error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      timestamp: new Date().toISOString()
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Unknown error',
+      details: error.stack || null
     }, { status: 500 });
   }
 }
 
-// 좋아요 API
+// 사용자 생성 처리 - Supabase users 테이블에 직접 저장
+async function handleUserCreated(userData: any) {
+  try {
+    // Clerk 사용자 데이터 추출
+    const { id, email_addresses, username, first_name, last_name, image_url } = userData;
+    
+    // 필요한 데이터 추출
+    const email = email_addresses?.[0]?.email_address || '';
+    const name = first_name ? (last_name ? `${first_name} ${last_name}` : first_name) : (username || email.split('@')[0]);
+    
+    console.log('새 사용자 생성:', { id, email, name });
+    
+    // Supabase users 테이블에 직접 사용자 삽입 - 정확한 필드명 사용
+    const { data, error } = await supabaseClient
+      .from('users')
+      .upsert([
+        {
+          id: id,
+          email: email,
+          name: name,
+          profile_image: image_url,
+          created_at: new Date().toISOString()
+        }
+      ], { onConflict: 'id' })
+      .select();
+    
+    if (error) {
+      console.error('Supabase users 테이블 삽입 오류:', error);
+      throw error;
+    }
+    
+    console.log('Supabase users 테이블에 사용자 저장 성공:', data?.[0]?.id);
+    
+    // 추가 처리가 필요한 경우 여기에 작성
+  } catch (error) {
+    console.error('handleUserCreated 오류:', error);
+    throw error;
+  }
+}
+
+// 사용자 업데이트 처리
+async function handleUserUpdated(userData: any) {
+  try {
+    // Clerk 사용자 데이터 추출
+    const { id, email_addresses, username, first_name, last_name, image_url } = userData;
+    
+    // 필요한 데이터 추출
+    const email = email_addresses?.[0]?.email_address || '';
+    const name = first_name ? (last_name ? `${first_name} ${last_name}` : first_name) : (username || email.split('@')[0]);
+    
+    console.log('사용자 업데이트:', { id, email, name });
+    
+    // Supabase users 테이블에 직접 사용자 업데이트 - 정확한 필드명 사용
+    const { data, error } = await supabaseClient
+      .from('users')
+      .update({
+        email: email,
+        name: name,
+        profile_image: image_url
+        // updated_at 필드는 테이블에 없으므로 제거
+      })
+      .eq('id', id)
+      .select();
+    
+    if (error) {
+      console.error('Supabase users 테이블 업데이트 오류:', error);
+      throw error;
+    }
+    
+    console.log('Supabase users 테이블에 사용자 업데이트 성공:', data?.[0]?.id);
+  } catch (error) {
+    console.error('handleUserUpdated 오류:', error);
+    throw error;
+  }
+}
+
+// 사용자 삭제 처리
+async function handleUserDeleted(userData: any) {
+  try {
+    const { id } = userData;
+    
+    console.log('사용자 삭제:', { id });
+    
+    // Supabase에서 사용자를 물리적으로 삭제
+    const { data, error } = await supabaseClient
+      .from('users')
+      .delete()
+      .eq('id', id)
+      .select();
+    
+    if (error) {
+      console.error('Supabase users 테이블 사용자 삭제 오류:', error);
+      throw error;
+    }
+    
+    console.log('Supabase users 테이블에서 사용자 삭제 성공:', id);
+  } catch (error) {
+    console.error('handleUserDeleted 오류:', error);
+    throw error;
+  }
+}
+
+// 게시물 업로드 API
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
-    const { action, imageId, image_id, userId, user_id, userName, user_name, text, increment = 1, commentId } = data;
-    
-    if (action === 'like') {
-      // 좋아요/좋아요 취소 처리
-      const likeImageId = imageId || image_id; // 두 버전 모두 지원
-      const likeUserId = userId || user_id; // 두 버전 모두 지원
+    // Clerk 웹훅 처리 - URL 경로가 webhook을 포함하는지 확인
+    const url = new URL(request.url);
+    if (url.pathname.includes('webhook')) {
+      // 웹훅 처리 로직
+      const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
       
-      if (!likeImageId || !likeUserId) {
-        return NextResponse.json({ 
-          success: false, 
-          error: "Image ID and User ID are required" 
-        }, { status: 400 });
+      if (!WEBHOOK_SECRET) {
+        console.error('CLERK_WEBHOOK_SECRET이 설정되지 않았습니다.');
+        return NextResponse.json(
+          { success: false, error: 'WEBHOOK_SECRET이 설정되지 않았습니다.' },
+          { status: 500 }
+        );
       }
       
-      const isLiked = data.isLiked || false;
-      const result = await toggleLike(likeImageId, likeUserId, isLiked, increment);
+      // 헤더 가져오기 - 요청 객체에서 직접 가져옴
+      const svix_id = request.headers.get('svix-id');
+      const svix_timestamp = request.headers.get('svix-timestamp');
+      const svix_signature = request.headers.get('svix-signature');
       
-      return NextResponse.json({ 
-        success: result, 
-        message: isLiked ? "Like removed" : "Like added"
-      });
-    } 
-    else if (action === 'comment') {
-      // 댓글 추가 처리
-      const commentImageId = imageId || image_id; // 두 버전 모두 지원
-      const commentUserId = userId || user_id; // 두 버전 모두 지원
-      const commentUserName = userName || user_name || 'Anonymous User'; // 두 버전 모두 지원
-      
-      if (!commentImageId || !commentUserId || !text) {
-        console.error("필수 필드 누락:", { imageId: commentImageId, userId: commentUserId, text });
-        return NextResponse.json({ 
-          success: false, 
-          error: "Image ID, User ID and Comment text are required" 
-        }, { status: 400 });
+      // If there are no headers, error out
+      if (!svix_id || !svix_timestamp || !svix_signature) {
+        return NextResponse.json(
+          { success: false, error: '웹훅 서명 누락' },
+          { status: 400 }
+        );
       }
       
-      const comment = await addComment(commentImageId, commentUserId, commentUserName, text);
+      // 요청 본문 가져오기
+      const payload = await request.json();
+      const body = JSON.stringify(payload);
       
-      return NextResponse.json({ 
-        success: !!comment, 
-        data: comment,
-        message: comment ? "Comment added" : "Failed to add comment"
-      });
-    }
-    else if (action === 'delete') {
-      // 이미지 ID 확인
-      if (!imageId) {
-        return NextResponse.json({
-          success: false,
-          error: 'Image ID is required'
-        }, { status: 400 });
-      }
-      
-      console.log(`Attempting to delete image with ID: ${imageId}, requested by user: ${userId}`);
+      // 서명 확인
+      const wh = new Webhook(WEBHOOK_SECRET);
+      let evt: WebhookEvent;
       
       try {
-        // 요청한 사용자 ID 설정 (RLS 정책용)
-        await supabase.rpc('set_current_user_id', { user_id: userId || user_id });
+        evt = wh.verify(body, {
+          'svix-id': svix_id,
+          'svix-timestamp': svix_timestamp,
+          'svix-signature': svix_signature,
+        }) as WebhookEvent;
+      } catch (err) {
+        console.error('웹훅 서명 확인 실패:', err);
+        return NextResponse.json(
+          { success: false, error: '서명 확인 실패' },
+          { status: 400 }
+        );
+      }
+      
+      // 이벤트 유형에 따른 처리
+      const eventType = evt.type;
+      if (eventType === 'user.created') {
+        await handleUserCreated(payload.data);
+      } else if (eventType === 'user.updated') {
+        await handleUserUpdated(payload.data);
+      } else if (eventType === 'user.deleted') {
+        await handleUserDeleted(payload.data);
+      }
+      
+      return NextResponse.json(
+        { success: true, message: '웹훅이 성공적으로 처리되었습니다.' },
+        { status: 200 }
+      );
+    }
+    
+    // 기존 POST 로직
+    const formData = await request.formData();
+    const action = formData.get('action') as string;
+    
+    // 액션에 따른 처리
+    if (action === 'delete') {
+      const imageId = formData.get('imageId') as string;
+      const userId = formData.get('userId') as string;
+      
+      if (!imageId || !userId) {
+        return NextResponse.json({ 
+          success: false, 
+          error: '이미지 ID와 사용자 ID가 필요합니다' 
+        }, { status: 400 });
+      }
+      
+      try {
+        // Supabase에서 이미지 확인
+        const { data: image, error: fetchError } = await supabaseClient
+          .from('shared_images')
+          .select('*')
+          .eq('id', imageId)
+          .single();
         
-        // 1. 첫번째 시도: Supabase shared_images 테이블에서 삭제
-        const { error: supabaseError } = await supabase
+        if (fetchError) {
+          return NextResponse.json({ 
+            success: false, 
+            error: '이미지를 찾을 수 없습니다' 
+          }, { status: 404 });
+        }
+        
+        // 사용자 권한 확인
+        if (image.user_id !== userId && !process.env.ADMIN_USER_IDS?.includes(userId)) {
+          return NextResponse.json({ 
+            success: false, 
+            error: '권한이 없습니다. 자신의 이미지만 삭제할 수 있습니다.' 
+          }, { status: 403 });
+        }
+        
+        // 이미지 삭제
+        const { error: deleteError } = await supabaseClient
           .from('shared_images')
           .delete()
           .eq('id', imageId);
         
-        if (supabaseError) {
-          console.log(`Supabase delete failed, trying DB delete: ${supabaseError.message}`);
-        } else {
-          console.log(`Image deleted successfully from Supabase: ${imageId}`);
+        if (deleteError) {
+          return NextResponse.json({ 
+            success: false, 
+            error: '이미지 삭제 실패: ' + deleteError.message 
+          }, { status: 500 });
         }
         
-        // 2. 두번째 시도: DRM generations 테이블에서 삭제
-        try {
-          // 해당 이미지 조회 (존재 확인)
-          const existingImage = await db.select()
-            .from(generations)
-            .where(eq(generations.id, imageId))
-            .limit(1);
-          
-          if (existingImage.length === 0) {
-            console.log(`Image not found in local DB: ${imageId}`);
-          } else {
-            console.log(`Image found in local DB: ${imageId}`);
-            
-            // 이미지 삭제
-            await db.delete(generations)
-              .where(eq(generations.id, imageId));
-            
-            console.log(`Image deleted successfully from local DB: ${imageId}`);
-          }
-        } catch (dbError) {
-          console.error(`Error deleting from local DB: ${dbError}`);
-          // 실패해도 계속 진행
-        }
+        // 캐시 무효화
+        invalidateCache();
         
-        // 3. 마지막 시도: 로컬 저장소에서 삭제
-        const images = getLocalSharedImages();
-        const imageIndex = images.findIndex(img => img.id === imageId);
+        // 페이지 재검증
+        revalidatePath('/community');
+        revalidatePath('/');
         
-        if (imageIndex !== -1) {
-          console.log(`Image found in local storage: ${imageId}`);
-          images.splice(imageIndex, 1);
-          sharedImagesCache = images;
-          saveSharedImages(images);
-          console.log(`Image deleted successfully from local storage: ${imageId}`);
-        } else {
-          console.log(`Image not found in local storage: ${imageId}`);
-        }
-        
-        // 성공 응답 (어디에서든 삭제 시도했으므로 성공으로 처리)
-        return NextResponse.json({
-          success: true,
-          message: 'Image deletion attempted'
+        return NextResponse.json({ 
+          success: true, 
+          message: '이미지가 성공적으로 삭제되었습니다.'
         });
-      } catch (error) {
-        console.error(`Error deleting image: ${error}`);
-        return NextResponse.json({
+      } catch (error: any) {
+        return NextResponse.json({ 
           success: false, 
-          error: `Failed to delete image: ${error}`
+          error: '이미지 삭제 중 오류 발생: ' + error.message 
         }, { status: 500 });
       }
     }
-    else if (action === 'deleteComment') {
-      // 필수 필드 확인
-      if (!commentId || !imageId) {
-        return NextResponse.json({
-          success: false,
-          error: 'Comment ID and Image ID are required'
-        }, { status: 400 });
-      }
-      
-      console.log(`Attempting to delete comment with ID: ${commentId}, imageId: ${imageId}`);
-      
-      try {
-        // 요청한 사용자 ID 설정 (RLS 정책용)
-        await supabase.rpc('set_current_user_id', { user_id: userId || user_id });
-        
-        // 1. Supabase에서 댓글 삭제
-        const { error: deleteError } = await supabase
-          .from('comments')
-          .delete()
-          .eq('id', commentId);
-        
-        if (deleteError) {
-          console.log(`Supabase comment delete failed: ${deleteError.message}`);
-        } else {
-          console.log(`Comment deleted successfully from Supabase: ${commentId}`);
-        }
-        
-        // 2. 로컬 저장소에서 댓글 삭제 시도
-        const images = getLocalSharedImages();
-        let commentDeleted = false;
-        
-        for (const img of images) {
-          if (img.id === imageId && img.comments) {
-            const commentIndex = img.comments.findIndex(c => c.id === commentId);
-            if (commentIndex !== -1) {
-              img.comments.splice(commentIndex, 1);
-              commentDeleted = true;
-              break;
-            }
-          }
-        }
-        
-        if (commentDeleted) {
-          sharedImagesCache = images;
-          saveSharedImages(images);
-          console.log(`Comment deleted successfully from local storage: ${commentId}`);
-        } else {
-          console.log(`Comment not found in local storage: ${commentId}`);
-        }
-        
-        // 항상 성공 응답 (어디에서든 삭제 시도했으므로)
-        return NextResponse.json({
-          success: true,
-          message: 'Comment deleted successfully'
-        });
-      } catch (error) {
-        console.error(`Error deleting comment: ${error}`);
-        return NextResponse.json({
-          success: false,
-          error: `Failed to delete comment: ${error}`
-        }, { status: 500 });
-      }
+
+    // 기본 응답
+    return NextResponse.json({ 
+      success: false, 
+      error: '유효하지 않은 작업입니다. 가능한 작업: delete' 
+    }, { status: 400 });
+    
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      error: error.message || '요청 처리 중 오류가 발생했습니다',
+    }, { status: 500 });
+  }
+}
+
+// 모든 공유 이미지 삭제를 위한 DELETE 핸들러
+export async function DELETE(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const postId = url.searchParams.get('postId');
+    
+    // 클라이언트에서 JSON 데이터 받기
+    const requestData = await request.json().catch(() => ({}));
+    const userId = requestData.userId;
+    
+    if (!postId) {
+      return NextResponse.json(
+        { success: false, error: '게시물 ID가 필요합니다' },
+        { status: 400 }
+      );
     }
     
-    return NextResponse.json({ 
-      success: false, 
-      error: "Invalid action" 
-    }, { status: 400 });
-  } catch (error) {
-    console.error("API error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: "An error occurred while processing the request" 
-    }, { status: 400 });
+    const user = await currentUser();
+    const clerkUserId = user?.id || userId;
+    
+    if (!clerkUserId) {
+      return NextResponse.json(
+        { success: false, error: '인증이 필요합니다' },
+        { status: 401 }
+      );
+    }
+
+    // Supabase에서 해당 게시물 확인
+    const { data: post, error: fetchError } = await supabaseClient
+      .from('shared_images')
+      .select('*')
+      .eq('id', postId)
+      .single();
+    
+    if (fetchError) {
+      console.error('게시물 조회 오류:', fetchError);
+      return NextResponse.json(
+        { success: false, error: '게시물을 찾을 수 없습니다' },
+        { status: 404 }
+      );
+    }
+    
+    // 본인 게시물인지 확인 (관리자는 예외)
+    if (post.user_id !== clerkUserId && !process.env.ADMIN_USER_IDS?.includes(clerkUserId)) {
+      return NextResponse.json(
+        { success: false, error: '본인 게시물만 삭제할 수 있습니다' },
+        { status: 403 }
+      );
+    }
+    
+    // Supabase에서 게시물 삭제
+    const { error: deleteError } = await supabaseClient
+      .from('shared_images')
+      .delete()
+      .eq('id', postId);
+    
+    if (deleteError) {
+      console.error('게시물 삭제 오류:', deleteError);
+      return NextResponse.json(
+        { success: false, error: '게시물 삭제 실패: ' + deleteError.message },
+        { status: 500 }
+      );
+    }
+    
+    // 페이지 재검증
+    revalidatePath('/community');
+    revalidatePath('/');
+    
+    return NextResponse.json({
+      success: true,
+      message: '게시물이 성공적으로 삭제되었습니다'
+    });
+    
+  } catch (error: any) {
+    console.error('게시물 삭제 처리 오류:', error);
+    
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error.message || '서버 오류가 발생했습니다'
+      },
+      { status: 500 }
+    );
   }
 } 

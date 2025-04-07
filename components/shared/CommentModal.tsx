@@ -105,14 +105,15 @@ export const CommentModal = ({
               <div key={comment.id} className="flex items-start gap-4 p-5 bg-gray-50 rounded-2xl hover:bg-gray-100/80 transition-colors">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-900">{getCommentAuthorName(comment.author, currentUser?.name)}</span>
+                    <span className="font-medium text-gray-900">{getCommentAuthorName(comment.author || comment.userName, currentUser?.name)}</span>
                     <span className="text-sm text-gray-500">{formatDate(comment.createdAt)}</span>
                   </div>
-                  <p className="text-gray-600">{comment.text || '내용 없음'}</p>
+                  <p className="text-gray-600">{comment.text || comment.content || 'No content'}</p>
                 </div>
                 {onDelete && currentUser && (
                   (comment.userId && currentUser.id === comment.userId) || 
                   (comment.author === currentUser.name) || 
+                  (comment.userName === currentUser.name) ||
                   (comment.author === currentUser.id) ||
                   (currentUser.id === 'admin')
                 ) && (

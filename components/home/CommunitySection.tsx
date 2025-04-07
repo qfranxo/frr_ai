@@ -9,12 +9,12 @@ import Masonry from 'react-masonry-css';
 
 interface CommunitySectionProps {
   posts: CommunityPost[];
-  onLike: (postId: number | string) => void;
+  onLike?: (postId: number | string) => void;
   onComment: (postId: number | string, text: string) => void;
   onDeleteComment: (postId: number | string, commentId: number | string) => void;
   onDeletePost?: (postId: string) => void;
-  likes: number[];
-  likedPosts: boolean[];
+  likes?: number[];
+  likedPosts?: boolean[];
   comments: Comment[][];
   currentUser?: {
     id: string;
@@ -70,27 +70,27 @@ export const CommunitySection = ({
         {posts.length > 0 ? (
           <Masonry
             breakpointCols={breakpointColumnsObj}
-            className="flex w-auto -ml-8"
-            columnClassName="pl-8 bg-clip-padding"
+            className="flex w-auto -ml-8 -mt-6" 
+            columnClassName="pl-8 pt-6 bg-clip-padding"
           >
             {posts?.map((post, index) => (
-              <div key={`${post.id}-${index}`} className="mb-8">
+              <div key={`${post.id}-${index}`} className="mb-8 sm:mb-10">
                 <ImageCard
                   post={post}
                   variant="main"
                   layout="masonry"
-                  onLike={() => onLike(post.id)}
+                  onLike={() => onLike ? onLike(post.id) : null}
                   onComment={(postId, text) => text ? onComment(postId, text) : null}
                   onDeleteComment={(postId, commentId) => onDeleteComment(postId, commentId)}
                   onDeletePost={onDeletePost ? (postId) => onDeletePost(postId) : undefined}
-                  onShare={handleShare ? () => handleShare(post) : () => {}}
-                  onDownload={handleDownload ? () => handleDownload(post) : () => {}}
+                  onShare={() => handleShare ? handleShare(post) : null}
+                  onDownload={() => handleDownload ? handleDownload(post) : null}
                   isLiked={likedPosts[index] || false}
-                  likesCount={likes[index] || post.likes}
-                  commentsCount={post.comments?.length || 0}
-                  comments={comments[index] || []}
+                  likesCount={likes[index] || post.likes || 0}
+                  commentsCount={comments[index]?.length || post.comments?.length || 0}
+                  comments={comments[index] || post.comments || []}
                   currentUser={currentUser}
-                  isSignedIn={isSignedIn}
+                  isSignedIn={Boolean(isSignedIn)}
                 />
               </div>
             ))}
