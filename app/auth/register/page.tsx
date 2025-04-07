@@ -60,13 +60,7 @@ export default function RegisterPage() {
   };
 
   const handleGoogleSignIn = () => {
-    // Google 로그인 구현
-    try {
-      window.location.href = "/api/auth/oauth/google";
-    } catch (error) {
-      console.error("Google 로그인 중 오류 발생:", error);
-      setError("Google 로그인 중 오류가 발생했습니다.");
-    }
+    // Google 로그인은 Clerk SignUp 컴포넌트에서 자동으로 제공하므로 이 함수는 사용하지 않습니다
   };
 
   return (
@@ -86,24 +80,13 @@ export default function RegisterPage() {
             </h2>
             <p className="text-gray-500 mt-2">새로운 계정을 만들어보세요</p>
           </div>
-
+          
           <SignUp 
             path="/auth/register"
             routing="path"
             signInUrl="/auth/register"
-            redirectUrl="/"
-            appearance={{
-              elements: {
-                rootBox: "mx-auto w-full",
-                card: "bg-transparent shadow-none",
-                formButtonPrimary: submitButtonClassName,
-                socialButtonsBlockButton: "h-12 rounded-xl bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 flex items-center justify-center gap-3 transition-all duration-200",
-                formFieldLabel: "block text-sm font-medium text-gray-700 mb-1",
-                formFieldInput: inputClassName,
-                dividerText: "px-4 text-gray-500 bg-white",
-                formFieldErrorText: "text-red-500 text-sm"
-              }
-            }}
+            afterSignUpUrl="/"
+            afterSignInUrl="/"
           />
 
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">

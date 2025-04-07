@@ -1,32 +1,10 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
 // 공개 경로 설정
-const isPublicRoute = createRouteMatcher([
-  '/',                      // 홈페이지
-  '/community',             // 커뮤니티 페이지
-  '/community/:path*',      // 커뮤니티 하위 경로
-  '/generate',              // 생성 페이지
-  '/subscription',          // 구독 페이지
-  '/about',                 // 소개 페이지
-  '/legal/:path*',          // 법적 문서
-  '/static-assets/:path*',  // 정적 자산
-  '/api/:path*',            // API 경로
-  '/auth/:path*',           // 인증 관련 경로
-  '/sign-in',               // 로그인 페이지
-  '/sign-up'                // 회원가입 페이지
-]);
-
-// 미들웨어에서 인증 보호 제거 및 정적 오류 페이지 처리
-export default clerkMiddleware(async (auth, req) => {
-  // 정적 오류 페이지인 경우 Clerk 관련 코드를 실행하지 않음
-  const pathname = req.nextUrl.pathname;
-  const staticErrorPages = ['/404', '/500', '/_error', '/_not-found'];
-  
-  if (staticErrorPages.includes(pathname)) {
-    return;
-  }
-  
-  // 모든 경로가 공개이므로 auth.protect()는 호출되지 않음
+export default clerkMiddleware(() => {
+  // 모든 요청을 허용
+  return NextResponse.next();
 });
 
 export const config = {
