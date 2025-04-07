@@ -10,7 +10,10 @@ const isPublicRoute = createRouteMatcher([
   '/about',                 // 소개 페이지
   '/legal/:path*',          // 법적 문서
   '/static-assets/:path*',  // 정적 자산
-  '/api/:path*'             // API 경로
+  '/api/:path*',            // API 경로
+  '/auth/:path*',           // 인증 관련 경로
+  '/sign-in',               // 로그인 페이지
+  '/sign-up'                // 회원가입 페이지
 ]);
 
 // 미들웨어에서 인증 보호 제거 및 정적 오류 페이지 처리

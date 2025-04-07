@@ -60,7 +60,13 @@ export default function RegisterPage() {
   };
 
   const handleGoogleSignIn = () => {
-    // Google sign-in logic should be removed as per the instructions
+    // Google 로그인 구현
+    try {
+      window.location.href = "/api/auth/oauth/google";
+    } catch (error) {
+      console.error("Google 로그인 중 오류 발생:", error);
+      setError("Google 로그인 중 오류가 발생했습니다.");
+    }
   };
 
   return (
@@ -81,86 +87,29 @@ export default function RegisterPage() {
             <p className="text-gray-500 mt-2">새로운 계정을 만들어보세요</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Button
-              onClick={handleGoogleSignIn}
-              className="w-[calc(100%-2rem)] mx-auto block h-12 rounded-xl mb-4 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 flex items-center justify-center gap-3 transition-all duration-200"
-            >
-              <FcGoogle className="w-5 h-5" />
-              Google로 계속하기
-            </Button>
-
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 text-gray-500 bg-white">또는</span>
-              </div>
-            </div>
-
-            {error && (
-              <p className="w-[calc(100%-2rem)] mx-auto block mb-4 text-red-500 text-sm text-center">{error}</p>
-            )}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                이메일
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className={inputClassName}
-                placeholder="이메일을 입력하세요"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className={inputClassName}
-                placeholder="비밀번호를 입력하세요"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                비밀번호 확인
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className={inputClassName}
-                placeholder="비밀번호를 다시 입력하세요"
-                required
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className={submitButtonClassName}
-              disabled={isLoading}
-            >
-              {isLoading ? "가입 중..." : "회원가입"}
-            </Button>
-          </form>
+          <SignUp 
+            path="/auth/register"
+            routing="path"
+            signInUrl="/auth/register"
+            redirectUrl="/"
+            appearance={{
+              elements: {
+                rootBox: "mx-auto w-full",
+                card: "bg-transparent shadow-none",
+                formButtonPrimary: submitButtonClassName,
+                socialButtonsBlockButton: "h-12 rounded-xl bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 flex items-center justify-center gap-3 transition-all duration-200",
+                formFieldLabel: "block text-sm font-medium text-gray-700 mb-1",
+                formFieldInput: inputClassName,
+                dividerText: "px-4 text-gray-500 bg-white",
+                formFieldErrorText: "text-red-500 text-sm"
+              }
+            }}
+          />
 
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">
             <p className="text-center text-gray-600">
               이미 계정이 있으신가요?{" "}
-              <Link href="/auth/login" className="text-blue-600 hover:text-blue-700 font-semibold">
+              <Link href="/auth/register" className="text-blue-600 hover:text-blue-700 font-semibold">
                 로그인
               </Link>
             </p>
