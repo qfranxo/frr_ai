@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense, useCallback, lazy } from 'react';
-import { Sparkles, Share2, Download, X, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Sparkles, Share2, Download, X, AlertCircle, AlertTriangle, Clock, Image as ImageIcon } from 'lucide-react';
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -1569,7 +1569,8 @@ function GenerateContent() {
                       </>
                     ) : (
                       <>
-                        <span className="text-sm font-medium">View recent images</span>
+                        <span className="text-sm font-medium">Recent</span>
+                        <span className="ml-1 text-sm">🖼️</span>
                       </>
                     )}
                   </button>
