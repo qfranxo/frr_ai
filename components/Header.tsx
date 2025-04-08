@@ -13,7 +13,7 @@ const SignInButton = dynamic(
 
 export default function Header() {
   return (
-    <header className="fixed top-0 w-full bg-white shadow-sm">
+    <header className="fixed top-0 w-full bg-white bg-opacity-100 shadow-md z-50">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* 통합 버튼 - CSS 반응형 처리 */}

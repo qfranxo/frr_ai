@@ -189,10 +189,7 @@ export default function Header() {
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-200 ease-out border-b-0",
-        isScrolled 
-          ? "bg-white/95 backdrop-blur-md shadow-[0_1px_3px_rgba(0,0,0,0.05)]" 
-          : "bg-transparent backdrop-blur-none border-b-0"
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-200 ease-out border-b-0 bg-white shadow-[0_2px_4px_rgba(0,0,0,0.08)]"
       )}
     >
       <div className="container mx-auto px-4">
