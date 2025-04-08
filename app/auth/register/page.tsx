@@ -84,7 +84,7 @@ export default function RegisterPage() {
           <SignUp 
             path="/auth/register"
             routing="path"
-            signInUrl="/auth/register"
+            signInUrl="/auth/login"
             afterSignUpUrl="/"
             afterSignInUrl="/"
           />
@@ -92,7 +92,7 @@ export default function RegisterPage() {
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">
             <p className="text-center text-gray-600">
               이미 계정이 있으신가요?{" "}
-              <Link href="/auth/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+              <Link href="/auth/login" className="text-blue-600 hover:text-blue-700 font-semibold">
                 로그인
               </Link>
             </p>

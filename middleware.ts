@@ -1,9 +1,22 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-// 공개 경로 설정
-export default clerkMiddleware(() => {
-  // 모든 요청을 허용
+// 공개 경로 패턴 설정
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/api/public(.*)',
+  '/auth/login(.*)',  // 로그인 페이지 추가
+  '/auth/register(.*)'  // 회원가입 페이지 추가
+]);
+
+// Clerk 미들웨어 설정
+export default clerkMiddleware((auth, req) => {
+  // 공개 경로 허용
+  if (isPublicRoute(req.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+  
+  // 그 외 요청도 허용 (모든 요청이 클라이언트단에서 처리될 예정)
   return NextResponse.next();
 });
 
