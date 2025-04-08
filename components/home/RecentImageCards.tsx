@@ -12,6 +12,7 @@ import { formatDate } from '@/utils/format'
 import { communityApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import { useCommentsBatch, useAddComment } from '@/hooks/useCommentsBatch'
+import { SignUpButton } from '@clerk/nextjs'
 
 // CSS 애니메이션을 정의하는 스타일 요소 추가
 const cssAnimation = `
@@ -72,6 +73,7 @@ interface ImageCardProps {
   likedPostsMap: Record<string, boolean>;
   likesMap: Record<string, number>;
   commentsMap: Record<string, any[]>;
+  isSignedIn: boolean;
 }
 
 export default function RecentImageCardsSuspenseWrapper() {
@@ -280,7 +282,8 @@ const ImageCard = memo(({
   handleLike, 
   likedPostsMap, 
   likesMap, 
-  commentsMap 
+  commentsMap,
+  isSignedIn
 }: ImageCardProps) => {
   // useMemo로 카테고리 정보 처리를 메모이제이션
   const categoryInfo = useMemo(() => {
@@ -341,6 +344,20 @@ const ImageCard = memo(({
             <span className="mr-1">{categoryInfo.emoji}</span> {categoryInfo.name}
           </span>
         </div>
+        
+        {/* 비로그인 시 Sign Up 배지 중앙에 표시 */}
+        {!isSignedIn && (
+          <SignUpButton mode="modal">
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center transition-all duration-300 cursor-pointer hover:bg-black/40">
+              <div className="px-4 py-2 bg-white shadow-lg rounded-full border border-blue-200 flex items-center gap-2 transform transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span className="text-blue-600 text-sm font-bold tracking-wide">SIGN UP</span>
+              </div>
+            </div>
+          </SignUpButton>
+        )}
         
         {/* 상호작용 버튼들 - 호버 시 표시, CSS 애니메이션 최적화 */}
         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2">
@@ -1091,6 +1108,7 @@ function RecentImageCardsContent() {
             likedPostsMap={likedPostsMap}
             likesMap={likesMap}
             commentsMap={commentsMap}
+            isSignedIn={!!isSignedIn}
           />
         ))}
       </div>

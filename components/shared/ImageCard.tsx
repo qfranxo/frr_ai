@@ -415,14 +415,12 @@ export function ImageCard({
           {/* 비로그인 시 오버레이 */}
           {!isSignedIn && (
             <SignUpButton mode="modal">
-              <div className="absolute inset-0 backdrop-blur-[0px] flex items-center justify-center transition-all duration-300 cursor-pointer">
-                <div className="absolute bottom-4 right-4">
-                  <div className="px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 group hover:bg-black/60 transition-all duration-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span className="text-white text-xs font-medium tracking-wide">SIGN UP</span>
-                  </div>
+              <div className="absolute inset-0 backdrop-blur-[0px] flex items-center justify-center transition-all duration-300 cursor-pointer hover:bg-black/40">
+                <div className="px-4 py-2 bg-white shadow-lg rounded-full border border-blue-200 flex items-center gap-2 transform transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span className="text-blue-600 text-sm font-bold tracking-wide">SIGN UP</span>
                 </div>
               </div>
             </SignUpButton>
