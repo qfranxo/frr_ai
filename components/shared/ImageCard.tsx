@@ -385,15 +385,12 @@ export function ImageCard({
             alt={post.description || post.prompt || "Image"}
             fill
             priority={true}
+            loading="eager"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className={`${post.aspectRatio === '9:16' ? 'object-contain' : 'object-cover'} transition-all duration-300 ${
-              imageStatusRef.current.loaded ? 'opacity-100' : 'opacity-0'
-            } group-hover:scale-105`}
+            className={`${post.aspectRatio === '9:16' ? 'object-contain' : 'object-cover'} transition-all duration-300 group-hover:scale-105`}
             onLoad={(e) => {
               imageStatusRef.current.loaded = true;
               imageStatusRef.current.error = false;
-              e.currentTarget.classList.remove('opacity-0');
-              e.currentTarget.classList.add('opacity-100');
             }}
             onError={() => {
               imageStatusRef.current.error = true;

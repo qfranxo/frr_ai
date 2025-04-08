@@ -540,9 +540,61 @@ export default function CommunityPage() {
     });
   };
 
+  // 데이터 캐싱 상태
+  const COMMUNITY_DATA_CACHE_KEY = 'community_data_cache';
+  const COMMUNITY_DATA_TIMESTAMP_KEY = 'community_data_timestamp';
+  const CACHE_EXPIRY_TIME = 5 * 60 * 1000; // 5분 캐시 유효 시간
+
+  // 캐시된 데이터 저장
+  const saveCommunityDataToCache = (data: any[]) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      localStorage.setItem(COMMUNITY_DATA_CACHE_KEY, JSON.stringify(data));
+      localStorage.setItem(COMMUNITY_DATA_TIMESTAMP_KEY, Date.now().toString());
+    } catch (error) {
+      console.error('커뮤니티 데이터 캐시 저장 오류:', error);
+    }
+  };
+
+  // 캐시된 데이터 로드
+  const loadCommunityDataFromCache = () => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const cachedData = localStorage.getItem(COMMUNITY_DATA_CACHE_KEY);
+      const timestamp = localStorage.getItem(COMMUNITY_DATA_TIMESTAMP_KEY);
+      
+      if (!cachedData || !timestamp) return null;
+      
+      const now = Date.now();
+      const cacheTime = parseInt(timestamp, 10);
+      
+      // 캐시 만료 시간 체크
+      if (now - cacheTime > CACHE_EXPIRY_TIME) {
+        // 캐시 만료됨
+        return null;
+      }
+      
+      return JSON.parse(cachedData);
+    } catch (error) {
+      console.error('커뮤니티 데이터 캐시 로드 오류:', error);
+      return null;
+    }
+  };
+
   // 호출 가능한 데이터 로드 함수 직접 정의
   const fetchData = async () => {
     try {
+      // 캐시된 데이터 확인
+      const cachedData = loadCommunityDataFromCache();
+      if (cachedData) {
+        console.log('캐시된 커뮤니티 데이터 사용');
+        setCommunityData(cachedData);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       
       // 1. 게시물 데이터 가져오기
@@ -602,10 +654,15 @@ export default function CommunityPage() {
           
           // 댓글 맵 상태 업데이트
           setCommentsMap(commentsData);
+          
+          // 게시물 데이터 캐싱
+          saveCommunityDataToCache(postsWithComments);
+          
           // 게시물 데이터 업데이트
           setCommunityData(postsWithComments);
         } catch (commentError) {
           // 에러 시 게시물 데이터만 업데이트
+          saveCommunityDataToCache(postsData); // 댓글 없는 데이터라도 캐싱
           setCommunityData(postsData);
         }
       } else {
@@ -1181,6 +1238,137 @@ export default function CommunityPage() {
 
   // 디버그 모드 비활성화
   const debugRef = useRef<boolean>(false);
+
+  // 커뮤니티 데이터에서 렌더링할 항목 필터링
+  const filteredData = useMemo(() => {
+    // 1. 데이터 유효성 확인 및 날짜 변환
+    const dataWithValidDates = communityData.map(post => {
+      // createdAt이 유효한 날짜가 아닌 경우 현재 시간으로 대체
+      let createdAtTime = new Date().getTime();
+      
+      try {
+        if (post.createdAt) {
+          const date = new Date(post.createdAt);
+          if (!isNaN(date.getTime())) {
+            createdAtTime = date.getTime();
+          }
+        }
+      } catch (e) {
+        // 날짜 파싱 실패 시 현재 시간 사용
+        console.warn('날짜 파싱 오류:', e);
+      }
+      
+      // 연산용 타임스탬프 추가
+      return {
+        ...post,
+        _createdAtTime: createdAtTime
+      };
+    });
+    
+    // 2. 필터링 적용
+    const filtered = dataWithValidDates.filter(post => {
+      if (selectedCategory === 'all') return true;
+      if (selectedCategory === 'my-cards') {
+        // 현재 사용자가 작성한 이미지만 표시
+        return post.userId === currentUser.id;
+      }
+      
+      // post에 category가 명시적으로 있는 경우 해당 값 사용
+      if (post.category) {
+        return post.category === selectedCategory;
+      }
+      
+      // renderingStyle 정보 추출
+      let styleValue = '';
+      if (typeof post.renderingStyle === 'string') {
+        styleValue = post.renderingStyle;
+      } else if (post.renderingStyle && typeof post.renderingStyle === 'object' && 'id' in post.renderingStyle) {
+        styleValue = (post.renderingStyle as { id?: string })?.id || '';
+      }
+      
+      // 카테고리 추론
+      const inferredCategory = getCategoryFromStyle(styleValue, post.prompt);
+      
+      // 추론된 카테고리와 선택된 카테고리 비교
+      return inferredCategory === selectedCategory;
+    });
+    
+    // 3. 정렬 적용 - 가장 최신 항목이 먼저 나오도록 정렬
+    return filtered.sort((a, b) => {
+      // 명시적으로 추가한 타임스탬프 사용
+      return b._createdAtTime - a._createdAtTime;
+    }).map(post => {
+      // 임시 필드 제거 후 반환
+      const { _createdAtTime, ...cleanPost } = post;
+      return cleanPost;
+    });
+  }, [communityData, selectedCategory, currentUser.id]);
+  
+  const CACHED_IMAGES_KEY = 'community_cached_images';
+
+  // 이미지 캐시 상태 관리
+  const loadImageCache = () => {
+    if (typeof window === 'undefined') return {};
+    
+    try {
+      const cachedData = localStorage.getItem(CACHED_IMAGES_KEY);
+      return cachedData ? JSON.parse(cachedData) : {};
+    } catch (error) {
+      console.error('캐시 로드 오류:', error);
+      return {};
+    }
+  };
+
+  // 이미지 캐시 저장
+  const saveImageToCache = (imageUrl: string) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const cachedImages = loadImageCache();
+      cachedImages[imageUrl] = true;
+      localStorage.setItem(CACHED_IMAGES_KEY, JSON.stringify(cachedImages));
+    } catch (error) {
+      console.error('캐시 저장 오류:', error);
+    }
+  };
+
+  // 최신 이미지 우선 로드를 위한 이미지 미리 로드 함수
+  useEffect(() => {
+    if (typeof window === 'undefined' || !filteredData.length) return;
+
+    // 프리로드할 이미지 수 (모든 이미지를 빠르게 로드)
+    const PRELOAD_COUNT = filteredData.length;
+    
+    // 캐시 확인
+    const cachedImages = loadImageCache();
+    
+    // 이미지 로드 및 캐싱
+    const preloadImages = async () => {
+      // 모든 이미지 동시에 로드 시작하지만 캐시 활용
+      filteredData.forEach((post, index) => {
+        if (!post.imageUrl) return;
+        
+        // 이미 캐시된 이미지인지 확인 - 객체를 사용하므로 속성으로 확인
+        if (cachedImages[post.imageUrl]) {
+          return; // 이미 캐시된 이미지는 스킵
+        }
+        
+        // 이미지 로드 시작 (지연 없이 동시에)
+        const img = new window.Image();
+        img.src = post.imageUrl;
+        
+        img.onload = () => {
+          // 이미지 로드 완료 시 캐시에 저장
+          saveImageToCache(post.imageUrl);
+        };
+      });
+    };
+    
+    preloadImages();
+    
+    // 클린업 함수는 필요 없음
+    return () => {};
+  }, [filteredData]);
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-hidden">

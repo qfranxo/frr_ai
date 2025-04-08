@@ -12,7 +12,7 @@ export default function HeroSection() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="space-y-6"
-          >
+          ><br />
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">
               <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">The Perfect AI-Generated </span>
               <br />
