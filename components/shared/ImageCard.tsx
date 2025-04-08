@@ -415,7 +415,7 @@ export function ImageCard({
           {/* 비로그인 시 오버레이 */}
           {!isSignedIn && (
             <SignUpButton mode="modal">
-              <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px] flex items-center justify-center transition-all duration-300 cursor-pointer">
+              <div className="absolute inset-0 backdrop-blur-[0px] flex items-center justify-center transition-all duration-300 cursor-pointer">
                 <div className="absolute bottom-4 right-4">
                   <div className="px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 group hover:bg-black/60 transition-all duration-300">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
