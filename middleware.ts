@@ -1,57 +1,43 @@
-import { NextResponse } from 'next/server';
-import { getAuth } from '@clerk/nextjs/server';
-import type { NextRequest } from 'next/server';
+import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// 공개 경로 목록
+// 공개 접근 가능한 경로 패턴
 const publicPaths = [
-  '/',
-  '/api/public',
-  '/sign-in',
-  '/sign-up',
-  '/auth/login',
-  '/auth/register',
-  '/api/clerk-webhook',
-  '/sso-callback'
+  "/", 
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/auth/login(.*)",
+  "/auth/register(.*)",
+  "/sso-callback(.*)",
+  "/api/public(.*)"
 ];
 
-// 정적 파일 접두사
-const staticFilePrefixes = [
-  '/_next',
-  '/favicon.ico',
-  '/images',
-  '/fonts'
-];
-
-export default function middleware(req: NextRequest) {
-  // 정적 파일 확인
-  const isStaticFile = staticFilePrefixes.some(prefix => 
-    req.nextUrl.pathname.startsWith(prefix)
-  );
-  
-  if (isStaticFile) {
-    return NextResponse.next();
-  }
-
-  // 공개 경로 확인
-  const isPublicPath = publicPaths.some(path => {
-    if (path.endsWith('*')) {
-      return req.nextUrl.pathname.startsWith(path.slice(0, -1));
-    }
-    return req.nextUrl.pathname === path || req.nextUrl.pathname.startsWith(`${path}/`);
+// 경로가 공개 접근 가능한지 확인하는 함수
+function isPublic(path: string) {
+  return publicPaths.find((pattern) => {
+    const regex = new RegExp(`^${pattern.replace(/\(\.\*\)/g, ".*")}$`);
+    return regex.test(path);
   });
+}
 
-  // 공개 경로면 그대로 통과
-  if (isPublicPath) {
+export default clerkMiddleware((auth, req) => {
+  // 현재 경로
+  const path = req.nextUrl.pathname;
+  
+  // 공개 경로면 접근 허용
+  if (isPublic(path)) {
     return NextResponse.next();
   }
 
-  // 그 외의 경우 - 일단 모든 요청 허용
-  // 실제 인증이 필요한 경우 여기서 체크하면 됨
+  // 다른 모든 경로도 일단 허용 (필요에 따라 여기서 인증 체크 구현)
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [
-    '/((?!api/clerk-webhook|api/public|_next/static|_next/image|favicon.ico).*)'
+    // API 라우트
+    '/(api|trpc)(.*)',
+    // 페이지 라우트, 정적 파일 제외
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'
   ],
 }; 
