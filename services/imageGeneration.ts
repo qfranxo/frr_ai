@@ -20,37 +20,82 @@ export class ImageGenerationService {
       throw new Error("프롬프트와 모델 옵션이 필요합니다.");
     }
 
-    const enhancedPrompt = generateEnhancedPrompt(request.prompt, request.modelOptions);
+    let enhancedPrompt = request.prompt;
+    const isTryOn = !!request.productImage;
     
-    const predictionParams: any = {
-      model: IMAGE_GENERATION_CONFIG.model,
-      input: {
-        prompt: enhancedPrompt,
-        size: IMAGE_GENERATION_CONFIG.defaultParams.size,
-        style: request.modelOptions.style || IMAGE_GENERATION_CONFIG.defaultParams.style,
-      },
-    };
-    
-    if (IMAGE_GENERATION_CONFIG.version) {
-      predictionParams.version = IMAGE_GENERATION_CONFIG.version;
+    // 트라이온 모드: 제품 이미지를 사용해 착용 이미지 생성
+    if (isTryOn) {
+      enhancedPrompt = `A photorealistic image of a person wearing the following item: ${request.prompt}. The item should look exactly like the reference product image. Make it look natural and professional, like a real e-commerce photo. Medium shot showing upper body properly, natural pose, balanced composition.`;
+    } else {
+      // 얼굴 집중 현상 개선을 위한 프롬프트 추가
+      const hasPortraitKeywords = ['portrait', 'face', 'headshot', 'close-up', 'closeup'].some(
+        keyword => request.prompt.toLowerCase().includes(keyword)
+      );
+      
+      // 얼굴 관련 키워드가 없다면 균형 잡힌 구도 추가
+      if (!hasPortraitKeywords) {
+        enhancedPrompt = `${request.prompt}, balanced composition, properly framed, professional distance`;
+      }
+      
+      // 눈 색상 관련 키워드 추가 (검은색 눈 방지)
+      const hasEyeColorKeywords = ['blue eyes', 'brown eyes', 'green eyes', 'hazel eyes', 'gray eyes'].some(
+        keyword => request.prompt.toLowerCase().includes(keyword)
+      );
+      
+      // 눈 색상이 지정되지 않았다면 자연스러운 눈 색상 추가
+      if (!hasEyeColorKeywords) {
+        const naturalEyeColors = [
+          "natural warm brown eyes",
+          "natural hazel eyes"
+        ];
+        const randomEyeColor = naturalEyeColors[Math.floor(Math.random() * naturalEyeColors.length)];
+        enhancedPrompt = `${enhancedPrompt}, ${randomEyeColor}`;
+      }
+      
+      enhancedPrompt = generateEnhancedPrompt(enhancedPrompt, request.modelOptions);
     }
     
-    let prediction = await this.replicate.predictions.create(predictionParams);
+    try {
+      // 네거티브 프롬프트에 검은색 눈과 얼굴 확대 방지 추가
+      let negativePrompt = "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, solid black eyes, pure black eyes, completely black eyes, unnaturally dark eyes, extreme close-up, too close face shot";
+      
+      if (request.modelOptions.negativePrompt) {
+        negativePrompt = `${request.modelOptions.negativePrompt}, ${negativePrompt}`;
+      }
+      
+      const predictionParams: any = {
+        model: IMAGE_GENERATION_CONFIG.model,
+        input: {
+          prompt: enhancedPrompt,
+          size: IMAGE_GENERATION_CONFIG.defaultParams.size,
+          style: request.modelOptions.style || IMAGE_GENERATION_CONFIG.defaultParams.style,
+          negative_prompt: negativePrompt
+        },
+      };
+      
+      if (IMAGE_GENERATION_CONFIG.version) {
+        predictionParams.version = IMAGE_GENERATION_CONFIG.version;
+      }
+      
+      let prediction = await this.replicate.predictions.create(predictionParams);
 
-    prediction = await this.waitForPrediction(prediction);
-    const imageUrl = prediction.output;
-    
-    if (!imageUrl) {
+      prediction = await this.waitForPrediction(prediction);
+      const imageUrl = prediction.output;
+      
+      if (!imageUrl) {
+        throw new Error("이미지 생성에 실패했습니다.");
+      }
+
+      const qualityScores = await checkImageQuality(imageUrl);
+
+      return {
+        success: true,
+        imageUrl,
+        quality: qualityScores
+      };
+    } catch (error) {
       throw new Error("이미지 생성에 실패했습니다.");
     }
-
-    const qualityScores = await checkImageQuality(imageUrl);
-
-    return {
-      success: true,
-      imageUrl,
-      quality: qualityScores
-    };
   }
 
   private async waitForPrediction(prediction: Prediction): Promise<Prediction> {

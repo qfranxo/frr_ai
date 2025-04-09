@@ -119,13 +119,16 @@ export interface IFeatureSection {
 }
 
 export interface IModelOptions {
-  style: string;
+  style?: string;
   renderStyle?: string;
+  size?: string;
+  negativePrompt?: string;
 }
 
 export interface IGenerateRequest {
   prompt: string;
   modelOptions: IModelOptions;
+  productImage?: string;
 }
 
 export interface IGenerateResponse {
