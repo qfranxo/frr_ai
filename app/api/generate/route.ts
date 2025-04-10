@@ -169,7 +169,7 @@ function getCategoryFromStyle(style?: string, prompt?: string): string {
     }
   }
   
-  return 'portrait'; // 기본값
+  return 'other'; // 기본값을 'portrait'에서 'other'로 변경
 }
 
 // 요청에서 비율 정보 추출하는 함수

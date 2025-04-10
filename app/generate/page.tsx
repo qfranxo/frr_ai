@@ -1668,26 +1668,34 @@ function GenerateContent() {
           <div className="mt-4">
             <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-                <div className="relative">
+                <h3 className="text-base font-medium text-gray-600 p-3 md:p-6 pb-0 md:pb-0 mb-1">Model Description <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-red-50 to-rose-50 text-red-600 border border-red-100 ml-2">Required</span></h3>
+                <div className="relative p-3 md:p-6 pt-2 md:pt-2">
                   <textarea
                     value={prompt}
                     onChange={(e) => {
                       setPrompt(e.target.value);
-                      // 새 텍스트 입력 시 잠금 해제
                       setAspectRatioLocked(false);
                       setGenderAgeLocked(false);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        e.stopPropagation(); // 폼 제출 방지
+                        e.stopPropagation();
                       }
                     }}
-                    placeholder="Describe the advertising model you want in detail..."
-                    className="block w-full min-h-[80px] md:min-h-[120px] p-3 md:p-6 rounded-t-2xl border-none focus:ring-0 transition-all resize-none bg-transparent text-gray-800 placeholder:text-gray-400 text-sm md:text-lg whitespace-pre-wrap break-words leading-relaxed"
-                    style={{ lineHeight: '1.6', letterSpacing: '0.01em' }}
-                    maxLength={200}
+                    maxLength={1000}
+                    placeholder="Describe the advertising model you want (e.g., professional business woman with confident smile...)"
+                    className="block w-full min-h-[80px] md:min-h-[100px] p-3 border border-gray-200 rounded-xl bg-white text-gray-800 text-sm placeholder:text-gray-400 resize-none focus:ring-2 focus:ring-blue-400 focus:outline-none overflow-auto break-words"
+                    style={{
+                      lineHeight: '1.5',
+                      boxSizing: 'border-box',
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                      maxWidth: '100%'
+                    }}
                   />
-                  
+                  <div className="absolute bottom-5 md:bottom-9 right-10 text-xs text-gray-400 bg-white/80 px-2 py-0.5 rounded-full border border-gray-100 shadow-sm">
+                    {prompt.length}/1000
+                  </div>
                 </div>
                 <div className="p-3 md:p-6 border-t border-gray-100 space-y-3 md:space-y-6">
                   {renderOptions()}

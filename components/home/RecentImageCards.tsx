@@ -231,7 +231,7 @@ const getCategoryFromStyle = (style: string, prompt?: string): string => {
     }
   }
 
-  return 'portrait'; // 모든 분석에서 카테고리를 찾지 못한 경우 기본값
+  return 'other'; // 모든 분석에서 카테고리를 찾지 못한 경우 'other'로 설정
 }
 
 const getCategoryColor = (category?: string): string => {
