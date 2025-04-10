@@ -28,7 +28,7 @@ export default function LoginPage() {
             path="/auth/login"
             routing="path"
             signUpUrl="/auth/register"
-            afterSignInUrl="/"
+            fallbackRedirectUrl="/"
             afterSignUpUrl="/"
           />
 
