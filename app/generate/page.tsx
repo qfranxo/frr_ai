@@ -1690,7 +1690,7 @@ function GenerateContent() {
                       }
                     }}
                     maxLength={1000}
-                    placeholder="Describe the advertising model you want (e.g., professional business woman with confident smile...)"
+                    placeholder="(e.g., in co-working space, laptop and coffee on desk...)"
                     className="block w-full min-h-[80px] md:min-h-[100px] p-3 border border-gray-200 rounded-xl bg-white text-gray-800 text-sm placeholder:text-gray-400 resize-none focus:ring-2 focus:ring-blue-400 focus:outline-none overflow-auto break-words"
                     style={{
                       lineHeight: '1.5',
