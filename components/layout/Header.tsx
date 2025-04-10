@@ -26,6 +26,20 @@ const NAVIGATION_ITEMS = [
 // 네비게이션 항목 타입 정의
 type NavigationItem = typeof NAVIGATION_ITEMS[number];
 
+// 경로가 일치하는지 또는 하위 경로인지 확인하는 함수
+const isActiveRoute = (pathname: string | null, href: string): boolean => {
+  if (!pathname) return false;
+  
+  // 정확한 일치
+  if (pathname === href) return true;
+  
+  // 루트 경로는 정확히 일치할 때만 활성화
+  if (href === '/') return pathname === '/';
+  
+  // 하위 경로 체크 (예: /community로 시작하는 모든 페이지에서 Community 메뉴 활성화)
+  return pathname.startsWith(`${href}/`) || (href !== '/' && pathname === href);
+};
+
 // 메모이제이션된 네비게이션 아이템 컴포넌트
 const NavItem = memo(({ item, pathname, onClick }: { 
   item: NavigationItem, 
@@ -37,7 +51,7 @@ const NavItem = memo(({ item, pathname, onClick }: {
     onClick={onClick}
     className={cn(
       "text-sm font-medium px-3 py-1.5 rounded-md transition-all duration-200",
-      pathname === item.href
+      isActiveRoute(pathname, item.href)
         ? 'text-blue-600 bg-blue-50'
         : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50/50'
     )}
@@ -59,7 +73,7 @@ const MobileNavItem = memo(({ item, pathname, onClick }: {
     onClick={onClick}
     className={cn(
       "block w-full p-0 text-sm bg-transparent px-3 py-2.5 rounded-md transition-all touch-manipulation text-left",
-      pathname === item.href
+      isActiveRoute(pathname, item.href)
         ? "text-blue-600 bg-blue-50"
         : "text-gray-600 hover:text-blue-600 hover:bg-blue-50/50"
     )}
@@ -198,9 +212,12 @@ export default function Header() {
           <div className="flex items-center gap-3">
             <Link 
               href="/" 
-              className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:scale-102 transition-transform"
+              className="flex items-center hover:scale-102 transition-transform"
             >
-              Frr AI
+              <span className="text-2xl mr-2"></span>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Frr AI
+              </span>
             </Link>
           </div>
 
