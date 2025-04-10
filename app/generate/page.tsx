@@ -1003,7 +1003,14 @@ function GenerateContent() {
           setResults(newResults);
         }
         
-        toast.success('Shared to community!');
+        // 저장 위치에 따라 다른 메시지 표시
+        if (data.data?.storage_path && data.data.storage_path.includes('/shared/')) {
+          // shared 폴더에 저장된 경우
+          toast.success('이미지가 성공적으로 공유되었고 커뮤니티에 저장되었습니다!');
+        } else {
+          // 기본 메시지
+          toast.success('Shared to community!');
+        }
         
         // 로컬 스토리지 업데이트 (isShared 플래그 설정)
         if (typeof window !== 'undefined') {
@@ -1030,8 +1037,8 @@ function GenerateContent() {
         
         // 공유 성공 후 커뮤니티 페이지로 이동
         setTimeout(() => {
-          router.push('/community');
-        }, 1000); // 1초 후 이동
+          router.push('/community?refresh=true');
+        }, 300); // 0.3초로 단축하여 빠르게 이동
       } else {
         // 공유 실패
         if (index < newResults.length && newResults[index]) {

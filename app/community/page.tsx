@@ -401,6 +401,9 @@ export default function CommunityPage() {
   const [categoryImageDeleted, setCategoryImageDeleted] = useState<Record<string, boolean>>({});
   const [showScrollTop, setShowScrollTop] = useState(false);
   
+  // 페이지 URL 파라미터 가져오기 - 훅을 컴포넌트 최상위 레벨로 이동
+  const searchParams = useSearchParams();
+  
   // Clerk에서 사용자 정보 가져오기
   const { user, isSignedIn } = useUser();
   
@@ -586,9 +589,12 @@ export default function CommunityPage() {
   // 호출 가능한 데이터 로드 함수 직접 정의
   const fetchData = async () => {
     try {
-      // 캐시된 데이터 확인
+      // URL 파라미터에서 refresh 확인 - 컴포넌트 레벨에서 선언된 searchParams 사용
+      const shouldRefresh = searchParams?.get('refresh') === 'true';
+      
+      // 캐시된 데이터 확인 (refresh가 true면 캐시 무시)
       const cachedData = loadCommunityDataFromCache();
-      if (cachedData) {
+      if (cachedData && !shouldRefresh) {
         console.log('캐시된 커뮤니티 데이터 사용');
         setCommunityData(cachedData);
         setIsLoading(false);

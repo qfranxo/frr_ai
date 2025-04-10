@@ -512,18 +512,31 @@ export async function POST(req: Request) {
       // 카테고리 최종 확인 (없으면 기본값)
       category = category || 'portrait';
       
+      // 스토리지에 이미지 업로드 - 실제 이미지 파일을 'shared' 폴더에 저장
+      let storageResult = null;
+      if (isReplicateUrl(imageUrl)) {
+        // Replicate URL일 경우 이미지를 다운로드하여 Supabase Storage에 업로드
+        storageResult = await uploadReplicateUrlToStorage(imageUrl, userId || 'anonymous');
+      }
+      
+      // 업로드된 이미지 URL이 있다면 사용, 없으면 원본 URL 유지
+      const finalImageUrl = storageResult?.publicUrl || imageUrl;
+      // 스토리지 경로 추출
+      const storagePath = storageResult?.storagePath || '';
+      
       // 1. shared_images 테이블에 저장
       const { data: sharedImage, error: insertError } = await supabase
         .from('shared_images')
         .insert({
           user_id: userId,
           user_name: userName,
-          image_url: imageUrl,
+          image_url: finalImageUrl, // 업로드된 이미지 URL 사용
           prompt,
           aspect_ratio: aspectRatio || '1:1',
           category,
           show_on_community: showOnCommunity,
-          original_generation_id: generationId
+          original_generation_id: generationId,
+          storage_path: storagePath // 스토리지 경로 저장
         })
         .select()
         .single();
@@ -540,9 +553,10 @@ export async function POST(req: Request) {
         success: true,
         data: {
           id: sharedImage.id,
-          url: imageUrl,
+          url: finalImageUrl, // 업로드된 URL 반환
           userId,
-          showOnCommunity
+          showOnCommunity,
+          storage_path: storagePath
         },
         message: '이미지가 성공적으로 공유되었습니다.'
       });
