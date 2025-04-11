@@ -14,6 +14,10 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata = {
   title: "Frr AI",
   description: "AI 모델로 나를 만들어보세요",
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 // Next.js 15에서는 정적 사이트 생성 시 서버 컴포넌트에서 현재 경로를 알기 어렵습니다.
@@ -34,6 +38,9 @@ export default function RootLayout({
     >
       <html lang="ko" suppressHydrationWarning className={`${kodeMono.variable} ${rubikDoodleShadow.variable}`}>
         <head>
+          {/* Favicon 추가 */}
+          <link rel="icon" href="/favicon.ico" sizes="any" />
+          
           {/* Font Awesome 추가 */}
           <link
             rel="stylesheet"
