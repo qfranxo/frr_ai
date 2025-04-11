@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUserSubscription, canUserGenerate } from "@/lib/db";
 import { currentUser } from '@clerk/nextjs/server';
+import { supabase } from "@/lib/supabase";
 
 // 하드코딩된 함수 제거
 // function auth() {
@@ -30,6 +31,38 @@ export async function GET() {
 
     const userId = user.id;
     
+    // Supabase에서 구독 정보 가져오기 시도
+    const { data: subscriptionData, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    // Supabase에 구독 정보가 있는 경우
+    if (!error && subscriptionData) {
+      // 각 티어별 최대 생성 가능 횟수
+      const maxGenerations = 
+        subscriptionData.plan === 'premium' ? 50 : 
+        subscriptionData.plan === 'starter' ? 2 : 0;
+      
+      const usageCount = subscriptionData.usage_count || 0;
+      const remaining = Math.max(0, maxGenerations - usageCount);
+      
+      return NextResponse.json({
+        subscription: {
+          tier: subscriptionData.plan,
+          maxGenerations: maxGenerations,
+          remaining: remaining,
+          renewalDate: subscriptionData.next_renewal_date,
+          // 추가 정보
+          startDate: subscriptionData.created_at,
+          nextBillingDate: subscriptionData.next_renewal_date,
+          autoRenew: subscriptionData.auto_renew
+        }
+      });
+    }
+    
+    // Supabase에 정보가 없거나 조회 실패한 경우 기존 로직으로 폴백
     // 사용자 구독 정보 가져오기 (getUserSubscription은 기본적으로 스타터 플랜 반환)
     const subscription = await getUserSubscription(userId);
     const { canGenerate, remaining } = await canUserGenerate(userId);
