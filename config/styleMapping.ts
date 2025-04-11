@@ -42,23 +42,24 @@ export const modelStyleMapping = {
     'short_wave': 'short wavy hair, cropped waves, modern wavy bob, textured short waves, stylish short wavy cut'
   },
   eyes: {
-    '갈색': 'brown eyes, natural symmetrical brown eyes, warm brown eyes, detailed brown irises, natural eye reflections, lifelike brown eyes, perfect symmetrical eyes',
-    '파란색': 'blue eyes, natural symmetrical blue eyes, bright blue eyes, detailed blue irises, natural eye reflections, lifelike blue eyes, perfect symmetrical eyes',
-    '검은색': 'black eyes, natural symmetrical black eyes, deep black eyes, detailed black irises, natural eye reflections, lifelike black eyes, perfect symmetrical eyes',
-    '초록색': 'green eyes, natural symmetrical green eyes, emerald eyes, detailed green irises, natural eye reflections, lifelike green eyes, perfect symmetrical eyes',
-    '회색': 'gray eyes, natural symmetrical gray eyes, steel gray eyes, detailed gray irises, natural eye reflections, lifelike gray eyes, perfect symmetrical eyes',
-    'brown': 'brown eyes, natural symmetrical brown eyes, warm brown eyes, detailed brown irises, natural eye reflections, lifelike brown eyes, perfect symmetrical eyes',
-    'blue': 'blue eyes, natural symmetrical blue eyes, bright blue eyes, detailed blue irises, natural eye reflections, lifelike blue eyes, perfect symmetrical eyes',
-    'black': 'black eyes, natural symmetrical black eyes, deep black eyes, detailed black irises, natural eye reflections, lifelike black eyes, perfect symmetrical eyes',
-    'green': 'green eyes, natural symmetrical green eyes, emerald eyes, detailed green irises, natural eye reflections, lifelike green eyes, perfect symmetrical eyes',
-    'gray': 'gray eyes, natural symmetrical gray eyes, steel gray eyes, detailed gray irises, natural eye reflections, lifelike gray eyes, perfect symmetrical eyes'
+    '갈색': 'natural warm brown eyes, symmetrical eyes, natural eye reflections',
+    '파란색': 'natural bright blue eyes, symmetrical eyes, natural eye reflections',
+    '검은색': 'dark brown eyes, symmetrical eyes, natural eye reflections',
+    '초록색': 'natural green eyes, symmetrical eyes, natural eye reflections',
+    '회색': 'natural gray eyes, symmetrical eyes, natural eye reflections',
+    'brown': 'natural warm brown eyes, symmetrical eyes, natural eye reflections',
+    'blue': 'natural bright blue eyes, symmetrical eyes, natural eye reflections',
+    'black': 'dark brown eyes, symmetrical eyes, natural eye reflections',
+    'green': 'natural green eyes, symmetrical eyes, natural eye reflections',
+    'gray': 'natural gray eyes, symmetrical eyes, natural eye reflections',
+    'hazel': 'natural hazel eyes, symmetrical eyes, warm golden flecks, natural eye reflections'
   },
   cameraDistance: {
-    'close_up': 'extreme close-up shot, highly detailed close shot, extreme close portrait, focus on subject, no background, studio lighting',
-    'medium': 'medium shot, clear detailed medium portrait, standard framing, balanced composition',
-    'far': 'wide shot, full environment visible, distant perspective, environmental portrait',
-    'full_body': 'full body shot, complete body visible, full length portrait',
-    'upper_body': 'upper body shot, clear focus on upper body, professional modeling of upper body',
-    'lower_body': 'lower body shot, clear focus on lower body, professional modeling of lower body'
+    'close_up': 'medium close-up shot, showing head and shoulders, balanced portrait, professional portrait framing, not too tight',
+    'medium': 'medium shot, clear detailed medium portrait, showing upper body, balanced composition, professional distance',
+    'far': 'wide shot, showing full body, environment visible, balanced full composition, proper framing',
+    'full_body': 'full body shot, complete body visible, properly framed full length portrait, showing entire person',
+    'upper_body': 'upper body shot, showing shoulders to waist, professionally framed upper body, balanced composition',
+    'lower_body': 'lower body shot, properly framed focus on lower body, professional modeling of lower body'
   }
 } as const; 

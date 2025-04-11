@@ -7,6 +7,9 @@ export function generateEnhancedPrompt(prompt: string, options: IModelOptions): 
   // 자연스러운 눈을 위한 향상
   enhancedPrompt = addNaturalEyesEnhancement(enhancedPrompt);
   
+  // 전신 균형을 위한 향상
+  enhancedPrompt = addBalancedBodyFocus(enhancedPrompt);
+  
   // 기본 품질 향상 키워드 추가
   enhancedPrompt = addQualityEnhancements(enhancedPrompt);
   
@@ -15,39 +18,59 @@ export function generateEnhancedPrompt(prompt: string, options: IModelOptions): 
 
 // 자연스러운 눈을 위한 프롬프트 향상
 export function addNaturalEyesEnhancement(prompt: string): string {
-  const eyeEnhancements = [
-    "symmetrical eyes",
-    "natural looking eyes", 
-    "detailed eye texture", 
-    "realistic eye reflections", 
-    "detailed irises",
-    "realistic eyebrows", 
-    "natural eyelashes",
-    "both eyes looking in same direction",
-    "symmetric eye shape",
-    "lifelike eyes",
-    "consistent eye color",
-    "accurate eye placement",
-    "proper eye spacing",
-    "balanced eye size",
-    "clear eyes"
-  ];
+  // 이미 눈 색상이 지정되어 있는지 확인
+  const hasEyeColorKeywords = ['blue eyes', 'brown eyes', 'green eyes', 'hazel eyes', 'gray eyes'].some(
+    keyword => prompt.toLowerCase().includes(keyword)
+  );
+  
+  // 눈 색상이 지정되지 않았다면 자연스러운 눈 색상 추가 (과도한 검은색 방지)
+  if (!hasEyeColorKeywords) {
+    // 다양한 자연스러운 눈 색상 옵션
+    const naturalEyeColors = [
+      "natural brown eyes",
+      "warm brown eyes",
+      "light brown eyes", 
+      "natural hazel eyes",
+      "warm hazel eyes"
+    ];
+    
+    // 무작위로 자연스러운 눈 색상 선택
+    const randomEyeColor = naturalEyeColors[Math.floor(Math.random() * naturalEyeColors.length)];
+    prompt = `${prompt}, ${randomEyeColor}`;
+  }
   
   // 눈 관련 키워드가 있는지 확인
   const hasEyeKeywords = ['eye', 'eyes', 'eyeball', 'iris', 'pupil', 'eyelash'].some(
     keyword => prompt.toLowerCase().includes(keyword)
   );
   
-  // 이미 눈 관련 키워드가 있다면 약간의 향상만 추가
+  // 이미 눈 관련 키워드가 있다면 최소한의 향상만 추가
   if (hasEyeKeywords) {
-    return `${prompt}, symmetrical eyes, natural looking eyes, lifelike eyes`;
+    return `${prompt}, symmetrical eyes, natural looking eyes`;
   }
   
-  // 없다면 전체 눈 향상 프롬프트 추가
-  // 중복을 피하기 위해 무작위로 3개의 눈 향상 키워드만 선택
-  const selectedEnhancements = eyeEnhancements.sort(() => 0.5 - Math.random()).slice(0, 3);
+  // 없다면 자연스러운 눈 프롬프트 추가 (최소화)
+  return `${prompt}, symmetrical eyes, natural looking eyes`;
+}
+
+// 전신 균형을 위한 프롬프트 향상 (얼굴 집중 완화)
+export function addBalancedBodyFocus(prompt: string): string {
+  // 전신 사진이나 인물 촬영 관련 표현이 있는지 확인
+  const hasFullBodyKeywords = ['full body', 'whole body', 'head to toe', 'full shot'].some(
+    keyword => prompt.toLowerCase().includes(keyword)
+  );
   
-  return `${prompt}, ${selectedEnhancements.join(', ')}`;
+  // 얼굴 관련 키워드가 있는지 확인
+  const hasFaceKeywords = ['face', 'portrait', 'headshot', 'close-up', 'closeup'].some(
+    keyword => prompt.toLowerCase().includes(keyword)
+  );
+  
+  // 얼굴 키워드가 있다면 그대로 두고, 아니면서 전신 키워드도 없다면 균형있는 구도 추가
+  if (!hasFaceKeywords && !hasFullBodyKeywords) {
+    return `${prompt}, balanced composition, medium shot, showing upper body to lower body`;
+  }
+  
+  return prompt;
 }
 
 // 이미지 품질 향상을 위한 프롬프트 추가
@@ -83,12 +106,18 @@ export function generateNegativePrompt(renderStyle: string = 'realistic'): strin
   // 기본 네거티브 프롬프트
   let negativePrompt = "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, ugly, disgusting, amputation, blurry, blurred, watermark, text, poorly drawn face, poorly drawn hands";
   
+  // 항상 포함될 눈 관련 네거티브 프롬프트
+  negativePrompt += ", solid black eyes, pure black eyes, completely black eyes, unnaturally dark eyes";
+  
   // 렌더링 스타일에 따라 네거티브 프롬프트 조정
   if (renderStyle === "anime") {
     negativePrompt += ", realistic face, realistic skin, 3D rendering, photorealistic, realistic lighting, realism, photorealism, realistic texture, too realistic";
   } else {
     // 사실적 스타일에서는 눈 관련 네거티브 프롬프트 강화
     negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color, different sized eyes, mismatched eye colors, uneven eyes, droopy eyes, googly eyes, wall-eyed, cross-eyed, strabismus, lazy eye, unfocused eyes, unrealistic iris, unrealistic pupil, artificial looking eyes";
+    
+    // 얼굴 집중 완화를 위한 네거티브 프롬프트
+    negativePrompt += ", extreme close-up, too close face shot, cropped body, partial body, disembodied";
   }
   
   return negativePrompt;
