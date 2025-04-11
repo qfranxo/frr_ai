@@ -1,8 +1,7 @@
 import { ClerkProvider } from '@clerk/nextjs'
-import { ThemeProvider } from '@/components/theme-provider'
-import { Toaster } from '@/components/ui/toaster'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
+import ToasterProvider from '@/components/providers/ToasterProvider'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // React Query 클라이언트를 컴포넌트 내부에서 인스턴스화
@@ -18,12 +17,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }))
 
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        variables: { 
+          colorPrimary: '#2563eb',
+          colorTextOnPrimaryBackground: '#fff'
+        }
+      }}
+    >
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        {children}
+        <ToasterProvider />
       </QueryClientProvider>
     </ClerkProvider>
   )

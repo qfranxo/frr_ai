@@ -29,7 +29,7 @@ export default function LoginPage() {
             routing="path"
             signUpUrl="/auth/register"
             fallbackRedirectUrl="/"
-            afterSignUpUrl="/"
+            redirectUrl="/"
           />
 
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">

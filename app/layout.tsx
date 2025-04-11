@@ -23,7 +23,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider 
+      appearance={{
+        variables: { 
+          colorPrimary: '#2563eb',
+          colorTextOnPrimaryBackground: '#fff'
+        }
+      }}
+    >
       <html lang="ko" suppressHydrationWarning>
         <head>
           {/* Font Awesome 추가 */}
