@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Share2, MessageCircle, Heart, AlertCircle, X, Send, Trash2, Camera, Palette, Mountain, Building, Wand2, Rocket, Clock, Dribbble, PawPrint, Sparkles, Box, Lock, User, Download, Plus, ChevronLeft, ChevronRight, Search, Filter, RefreshCw, MoreVertical } from 'lucide-react';
@@ -391,7 +391,8 @@ const CategoryButton = ({ id, label, isSelected, onClick }: CategoryButtonProps)
   );
 };
 
-export default function CommunityPage() {
+// 메인 기능을 담당하는 컴포넌트를 분리
+function CommunityContent() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [communityData, setCommunityData] = useState<GenerationPost[]>([]);
@@ -406,6 +407,14 @@ export default function CommunityPage() {
   
   // Clerk에서 사용자 정보 가져오기
   const { user, isSignedIn } = useUser();
+  
+  // 검색 파라미터 변경 핸들러
+  const handleSearchParamsChange = useCallback((searchParams: URLSearchParams) => {
+    const category = searchParams.get('category');
+    if (category) {
+      setSelectedCategory(category);
+    }
+  }, []);
   
   // 현재 사용자 정보
   const currentUser = {
@@ -685,7 +694,7 @@ export default function CommunityPage() {
   // 초기 데이터 로드
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [searchParams]);
   
   // 좋아요 핸들러 업데이트
   const handlePostLike = async (postId: string) => {
@@ -1376,8 +1385,18 @@ export default function CommunityPage() {
     return () => {};
   }, [filteredData]);
 
+  // useEffect 내부에서 URL 파라미터 처리
+  useEffect(() => {
+    if (searchParams) {
+      const categoryFromUrl = searchParams.get('category');
+      if (categoryFromUrl) {
+        setSelectedCategory(categoryFromUrl);
+      }
+    }
+  }, [searchParams]);
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white overflow-hidden">
+    <div className="container mx-auto py-5 px-4 md:px-6 min-h-screen">
       {/* 배경 효과 */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-50/90 via-purple-50/90 to-white" />
@@ -1693,5 +1712,14 @@ export default function CommunityPage() {
         type="danger"
       />
     </div>
+  );
+}
+
+// Suspense로 감싸는 래퍼 컴포넌트
+export default function CommunityPage() {
+  return (
+    <Suspense fallback={<div className="w-full py-12 text-center">Loading community...</div>}>
+      <CommunityContent />
+    </Suspense>
   );
 } 
