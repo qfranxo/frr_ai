@@ -170,11 +170,11 @@ const SubscriptionStatus = ({ subscription }: SubscriptionStatusProps) => {
           }}
         />
       </div>
-      <span className="font-bold text-sm text-indigo-600 mr-0.5">
+      <span className="font-bold text-sm text-indigo-600 mr-0.5 font-kode-mono">
         {subscription?.remaining || 0}
       </span>
-      <span className="text-gray-400 text-xs mr-0.5">/</span>
-      <span className="text-gray-500 text-xs">
+      <span className="text-gray-400 text-xs mr-0.5 font-kode-mono">/</span>
+      <span className="text-gray-500 text-xs font-kode-mono">
         {subscription?.maxGenerations || 0}
       </span>
     </div>
@@ -1481,12 +1481,12 @@ function GenerateContent() {
             {isLoading ? (
               <>
                 <Sparkles className="w-5 h-5 animate-pulse" />
-                <span>Creating AI Model...</span>
+                <span className="font-kode-mono">Creating AI Model...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                <span>Generate AI Model</span>
+                <span className="font-kode-mono">Generate AI Model</span>
               </>
             )}
           </button>
@@ -1496,7 +1496,7 @@ function GenerateContent() {
               className="w-full h-12 md:h-14 rounded-xl flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-xl hover:shadow-2xl font-medium text-sm md:text-base"
             >
               <Sparkles className="w-5 h-5" />
-              <span>Generate AI Model</span>
+              <span className="font-kode-mono">Generate AI Model</span>
             </button>
           </SignUpButton>
         )}
@@ -1541,7 +1541,7 @@ function GenerateContent() {
           className="w-full max-w-3xl md:mx-auto ml-0 mr-auto"
         >
           <div className="text-center mb-8 md:mb-12 mt-6">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 mb-6">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 mb-6 font-kode-mono">
               Create Your AI Model
             </h1>
             
@@ -1552,7 +1552,7 @@ function GenerateContent() {
                   subscription?.tier === 'premium' 
                     ? 'bg-indigo-600 text-white border-indigo-300' 
                     : 'text-gray-700 bg-white border-gray-200'
-                }`}>
+                } font-kode-mono`}>
                   {subscription?.tier === 'premium' ? 'Premium User' : 
                    subscription?.tier === 'starter' ? 'Starter Plan' : 'Free User'}
                 </div>
@@ -1571,12 +1571,12 @@ function GenerateContent() {
                   >
                     {showHistory ? (
                       <>
-                        <span className="text-sm font-medium">Hide</span>
+                        <span className="text-sm font-medium font-kode-mono">Hide</span>
                         <X className="w-3.5 h-3.5" />
                       </>
                     ) : (
                       <>
-                        <span className="text-sm font-medium">Recent</span>
+                        <span className="text-sm font-medium font-kode-mono">Recent</span>
                         <span className="ml-1 text-sm">🖼️</span>
                       </>
                     )}

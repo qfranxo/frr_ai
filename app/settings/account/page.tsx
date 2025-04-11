@@ -379,7 +379,7 @@ export default function AccountSettingsPage() {
         <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 mb-5 sm:mb-6">
           <div className="flex items-center mb-3 sm:mb-6">
             <div className="flex-1">
-              <h2 className="text-lg md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent inline-flex items-center">
+              <h2 className="text-lg md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent inline-flex items-center font-kode-mono">
                 <CreditCard className="h-3.5 w-3.5 md:h-6 md:w-6 text-purple-500 mr-1.5 md:mr-3" />
                 Subscription Details
               </h2>

@@ -46,15 +46,15 @@ export default function MainPageClient({ posts }: MainPageClientProps) {
       <h3>Featured Prompts</h3>
       
       <div className="text-center mb-12">
-        <h1 className="text-4xl md:text-4xl font-bold text-center mb-6">
+        <h1 className="text-4xl md:text-4xl font-bold text-center mb-6 font-kode-mono">
           AI Model Gallery
         </h1>
-        <p className="text-xl text-gray-600 text-center mb-8">
+        <p className="text-xl text-gray-600 text-center mb-8 font-kode-mono">
           Discover Amazing AI-Generated Advertising Models
         </p>
         <Link 
           href="/gallery" 
-          className="mt-8 inline-flex items-center text-blue-600 hover:text-blue-700 font-medium"
+          className="mt-8 inline-flex items-center text-blue-600 hover:text-blue-700 font-medium font-kode-mono"
         >
           Explore More Models
           <ArrowRight className="ml-2 w-4 h-4" />
@@ -64,10 +64,10 @@ export default function MainPageClient({ posts }: MainPageClientProps) {
       <section className="py-16">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-12">
-            <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+            <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4 font-kode-mono">
               Innovative Technology
             </h3>
-            <p className="text-gray-600 max-w-3xl mx-auto">
+            <p className="text-gray-600 max-w-3xl mx-auto font-kode-mono">
               Create stunning models with our cutting-edge AI engine
             </p>
           </div>
@@ -77,10 +77,10 @@ export default function MainPageClient({ posts }: MainPageClientProps) {
       <section className="bg-gray-50 py-16">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-12">
-            <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+            <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4 font-kode-mono">
               Creator-Centric Platform
             </h3>
-            <p className="text-gray-600 max-w-3xl mx-auto">
+            <p className="text-gray-600 max-w-3xl mx-auto font-kode-mono">
               Empower your creativity with intuitive tools and community support
             </p>
           </div>

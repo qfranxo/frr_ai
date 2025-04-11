@@ -7,6 +7,7 @@ import GeistWrapper from "@/components/providers/GeistProvider";
 import Script from "next/script";
 import { BlobAnimation } from "@/components/ui/blob-animation";
 import ToasterProvider from "@/components/providers/ToasterProvider";
+import { kodeMono } from "./fonts";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,7 +32,7 @@ export default function RootLayout({
         }
       }}
     >
-      <html lang="ko" suppressHydrationWarning>
+      <html lang="ko" suppressHydrationWarning className={kodeMono.variable}>
         <head>
           {/* Font Awesome 추가 */}
           <link

@@ -40,6 +40,9 @@ module.exports = {
       textColor: {
         foreground: 'hsl(var(--foreground))',
       },
+      fontFamily: {
+        'kode-mono': ['var(--font-kode-mono)', 'monospace'],
+      },
     },
   },
   plugins: [],

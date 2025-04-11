@@ -53,15 +53,15 @@ export const CommunitySection = ({
     <section className="py-24">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4 font-kode-mono">
           AI Model Gallery
           </h2>
-          <p className="text-xs sm:text-sm text-gray-500 mb-6">
+          <p className="text-xs sm:text-sm text-gray-500 mb-6 font-kode-mono">
             Meet the amazing AI models created by AI
           </p>
           <Link 
             href="/community"
-            className="inline-flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="inline-flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium font-kode-mono"
           >
             View More Models →
           </Link>

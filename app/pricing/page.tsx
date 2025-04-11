@@ -184,8 +184,8 @@ export default function PricingPage() {
     return (
       <div className="relative mt-16 md:mt-24 max-w-3xl mx-auto px-4">
         <div className="text-center mb-8 md:mb-12">
-          <span className="text-lg md:text-xl font-medium text-blue-600 mb-2 block">FAQ</span>
-          <h2 className="text-2xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent">
+          <span className="text-lg md:text-xl font-medium text-blue-600 mb-2 block font-kode-mono">FAQ</span>
+          <h2 className="text-2xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent font-kode-mono">
             Frequently Asked Questions
           </h2>
         </div>
@@ -348,7 +348,7 @@ export default function PricingPage() {
       return (
         <button
           disabled
-          className={BUTTON_STYLES.disabled}
+          className={BUTTON_STYLES.disabled + " font-kode-mono"}
         >
           Current Plan
         </button>
@@ -360,7 +360,7 @@ export default function PricingPage() {
       return (
         <Button
           disabled
-          className={BUTTON_STYLES.secondary + " text-gray-400"}
+          className={BUTTON_STYLES.secondary + " text-gray-400 font-kode-mono"}
         >
           Coming Soon
         </Button>
@@ -374,7 +374,7 @@ export default function PricingPage() {
         return (
           <Button
             disabled
-            className={BUTTON_STYLES.disabled}
+            className={BUTTON_STYLES.disabled + " font-kode-mono"}
           >
             Current Plan
           </Button>
@@ -382,7 +382,7 @@ export default function PricingPage() {
       } else {
         return (
           <SignUpButton mode="modal">
-            <Button className={BUTTON_STYLES.secondary}>
+            <Button className={BUTTON_STYLES.secondary + " font-kode-mono"}>
               Get Started
             </Button>
           </SignUpButton>
@@ -394,13 +394,13 @@ export default function PricingPage() {
     return isSignedIn ? (
       <Button
         onClick={handleUpgrade}
-        className={BUTTON_STYLES.primary}
+        className={BUTTON_STYLES.primary + " font-kode-mono"}
       >
         Upgrade
       </Button>
     ) : (
       <SignUpButton mode="modal">
-        <Button className={BUTTON_STYLES.primary}>
+        <Button className={BUTTON_STYLES.primary + " font-kode-mono"}>
           Get Started
         </Button>
       </SignUpButton>
@@ -424,11 +424,11 @@ export default function PricingPage() {
           className="text-center mb-10 md:mb-16"
         >
           <div className="space-y-6 md:space-y-8 mb-4 md:mb-8">
-            <h1 className="text-3xl md:text-5xl lg:text-5.5xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1">
+            <h1 className="text-3xl md:text-5xl lg:text-5.5xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 font-kode-mono">
               Simple & Transparent Pricing
             </h1>
           </div>
-          <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto font-kode-mono">
             Choose the perfect plan for your creative journey
           </p>
         </motion.div>
@@ -489,7 +489,7 @@ export default function PricingPage() {
                   </div>
                 )}
                 <div className="text-center mb-5 md:mb-6">
-                  <h3 className={`text-xl font-bold mb-2 transition-colors duration-300
+                  <h3 className={`text-xl font-bold mb-2 transition-colors duration-300 font-kode-mono
                     ${selectedPlan === plan.name 
                       ? 'text-blue-600'
                       : 'text-gray-900'
@@ -497,10 +497,10 @@ export default function PricingPage() {
                   >
                     {plan.name}
                   </h3>
-                  <p className="w-full p-0 text-sm bg-transparent border-none text-gray-600 placeholder:text-gray-400 min-h-[40px]">
+                  <p className="w-full p-0 text-sm bg-transparent border-none text-gray-600 placeholder:text-gray-400 min-h-[40px] font-kode-mono">
                     {plan.description}
                   </p>
-                  <div className="text-3xl font-bold mb-2">
+                  <div className="text-3xl font-bold mb-2 font-kode-mono">
                     <span className={`${selectedPlan === plan.name ? 'text-blue-600' : 'text-gray-900'}`}>
                       {plan.name === "Starter" ? (
                         <>$0</>

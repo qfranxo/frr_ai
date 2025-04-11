@@ -1415,11 +1415,11 @@ function CommunityContent() {
               transition={{ duration: 0.5 }}
               className="text-center sm:text-center text-left mb-6 sm:mb-8 md:mb-12 pl-0 sm:pl-0"
             >
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#6366f1] mb-4 sm:mb-6">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#6366f1] mb-4 sm:mb-6 font-kode-mono">
                 Community Gallery
               </h1>
               
-              <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto mb-4 sm:mb-6">
+              <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto mb-4 sm:mb-6 font-kode-mono">
                 Explore shared images and share your creations
               </p>
               

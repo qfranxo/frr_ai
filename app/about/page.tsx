@@ -42,13 +42,13 @@ export default function AboutPage() {
           >
             {/* 제목 컨테이너에 여백 추가 */}
             <div className="space-y-6 sm:space-y-8 mb-6 sm:mb-8">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 font-kode-mono">
                 Start Creating with Frr AI
               </h1>
             </div>
             
             {/* 서브텍스트에 여백과 line-height 조정 */}
-            <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed py-2">
+            <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed py-2 font-kode-mono">
               Join thousands of creators who are already transforming their ideas into stunning visuals
             </p>
             
@@ -66,7 +66,7 @@ export default function AboutPage() {
                   <div className="flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7">
                     <span className="text-lg sm:text-xl">{badge.icon}</span>
                   </div>
-                  <span className="text-xs sm:text-sm font-medium text-gray-700">{badge.text}</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 font-kode-mono">{badge.text}</span>
                 </div>
               ))}
             </div>
@@ -84,7 +84,7 @@ export default function AboutPage() {
             className="text-center mb-10 sm:mb-16"
           >
             <div className="space-y-6 sm:space-y-8 mb-6 sm:mb-8">
-              <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1">
+              <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 font-kode-mono">
                 Our Core Values
               </h2>
             </div>
@@ -112,8 +112,8 @@ export default function AboutPage() {
                 className="bg-white rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 <span className="text-3xl sm:text-4xl mb-3 sm:mb-4 block">{item.icon}</span>
-                <h3 className="text-lg sm:text-xl font-bold mb-2 sm:mb-3">{item.title}</h3>
-                <p className="text-sm sm:text-base text-gray-600">{item.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold mb-2 sm:mb-3 font-kode-mono">{item.title}</h3>
+                <p className="text-sm sm:text-base text-gray-600 font-kode-mono">{item.description}</p>
               </div>
             ))}
           </div>
@@ -136,11 +136,11 @@ export default function AboutPage() {
             className="text-center mb-10 sm:mb-16"
           >
             <div className="space-y-6 sm:space-y-8 mb-6 sm:mb-8">
-              <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1">
+              <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 font-kode-mono">
                 Creative Community
               </h2>
             </div>
-            <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-2xl mx-auto font-kode-mono">
               Join a vibrant community of creators and innovators
             </p>
           </motion.div>
@@ -173,8 +173,8 @@ export default function AboutPage() {
                 <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300">
                   <span className="text-2xl sm:text-3xl">{item.icon}</span>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3">{item.title}</h3>
-                <p className="text-sm sm:text-base text-gray-600">{item.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 font-kode-mono">{item.title}</h3>
+                <p className="text-sm sm:text-base text-gray-600 font-kode-mono">{item.description}</p>
               </motion.div>
             ))}
           </div>
@@ -199,23 +199,23 @@ export default function AboutPage() {
               className="max-w-3xl"
             >
               <div className="space-y-6 sm:space-y-8 mb-6 sm:mb-8">
-                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1">
+                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent [line-height:1.3] md:[line-height:1.2] px-1 font-kode-mono">
                   Ready to Get Started?
                 </h2>
               </div>
-              <p className="text-base sm:text-lg md:text-xl text-gray-600">
+              <p className="text-base sm:text-lg md:text-xl text-gray-600 font-kode-mono">
                 Join thousands of creators who are already transforming their ideas into stunning visuals
               </p>
             </motion.div>
 
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full max-w-md">
               <SignUpButton mode="modal">
-                <Button className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <Button className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 font-kode-mono">
                   Start Creating
                 </Button>
               </SignUpButton>
               <Link href="/pricing" className="w-full">
-                <Button variant="outline" className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium border-2 border-gray-200 hover:border-purple-200 text-gray-700 hover:text-purple-700 rounded-xl hover:bg-purple-50/50 transition-all duration-300">
+                <Button variant="outline" className="w-full h-9 sm:h-12 px-0 sm:px-8 text-xs sm:text-base font-medium border-2 border-gray-200 hover:border-purple-200 text-gray-700 hover:text-purple-700 rounded-xl hover:bg-purple-50/50 transition-all duration-300 font-kode-mono">
                   Explore Plans
                 </Button>
               </Link>
@@ -247,8 +247,8 @@ export default function AboutPage() {
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center mb-2 sm:mb-3">
                     {cloneElement(item.icon, { className: "w-4 h-4 sm:w-5 sm:h-5 text-blue-600" })}
                   </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-0.5 sm:mb-1">{item.text}</h3>
-                  <p className="text-xs sm:text-sm text-gray-500">{item.subtext}</p>
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-0.5 sm:mb-1 font-kode-mono">{item.text}</h3>
+                  <p className="text-xs sm:text-sm text-gray-500 font-kode-mono">{item.subtext}</p>
                 </div>
               ))}
             </div>

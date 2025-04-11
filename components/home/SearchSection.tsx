@@ -145,7 +145,7 @@ export const SearchSection = () => {
                 className="w-[calc(100%-3rem)] mx-auto block h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl flex items-center justify-center gap-4 text-lg font-medium shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]"
               >
                 <Sparkles className="w-5 h-5" />
-                <span className="ml-1">Generate AI Model</span>
+                <span className="ml-1 font-kode-mono">Generate AI Model</span>
               </Button>
             </div>
           </form>

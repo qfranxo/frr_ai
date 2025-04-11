@@ -217,3 +217,12 @@ button:hover, button:focus, button:active {
   }
 }
 
+/* 파일 상단에 폰트 정의 추가 */
+@font-face {
+  font-family: 'Kode Mono';
+  src: url('/fonts/kode-mono/KodeMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
