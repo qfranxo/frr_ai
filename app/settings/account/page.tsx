@@ -269,7 +269,7 @@ export default function AccountSettingsPage() {
               <Link href="/" className="flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-500 border border-blue-200/30 shadow-sm hover:shadow-md hover:text-purple-500 hover:from-blue-50 hover:to-purple-100 transition-all mr-3 sm:mr-5">
                 <ArrowLeft size={16} />
               </Link>
-              <h1 className="text-xl sm:text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent pt-6 pb-4">
+              <h1 className="text-xl sm:text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent pt-6 pb-4 font-kode-mono">
                 Account Settings
               </h1>
             </div>
@@ -336,7 +336,7 @@ export default function AccountSettingsPage() {
             <Link href="/" className="flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 text-blue-500 border border-blue-200/30 shadow-sm hover:shadow-md hover:text-purple-500 hover:from-blue-50 hover:to-purple-100 transition-all mr-3 sm:mr-5">
               <ArrowLeft size={16} />
             </Link>
-            <h1 className="text-xl sm:text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent pt-6 pb-4">
+            <h1 className="text-xl sm:text-2xl md:text-4xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent pt-6 pb-4 font-kode-mono">
               Account Settings
             </h1>
           </div>
@@ -450,7 +450,7 @@ export default function AccountSettingsPage() {
               <div className="flex flex-col items-end">
                 <Button
                   onClick={handleUpgradeSubscription}
-                  className="px-4 sm:px-6 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors duration-200 hover:bg-blue-700"
+                  className="px-4 sm:px-6 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors duration-200 hover:bg-blue-700 font-kode-mono"
                 >
                   Upgrade to Premium
                 </Button>
@@ -552,7 +552,7 @@ export default function AccountSettingsPage() {
         <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 mb-8 sm:mb-12">
           <div className="flex items-center mb-3 sm:mb-6">
             <div className="flex-1">
-              <h2 className="text-lg md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent inline-flex items-center">
+              <h2 className="text-lg md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent inline-flex items-center font-kode-mono">
                 <User className="h-3.5 w-3.5 md:h-6 md:w-6 text-blue-500 mr-1.5 md:mr-3" />
                 Account Management
               </h2>
@@ -566,7 +566,7 @@ export default function AccountSettingsPage() {
                   <Button 
                     onClick={handleManageAccount}
                     variant="ghost" 
-                    className="text-xs sm:text-sm text-gray-700 hover:text-blue-600 hover:translate-x-1 transition-all duration-300 p-0 mb-1 flex items-center group"
+                    className="text-xs sm:text-sm text-gray-700 hover:text-blue-600 hover:translate-x-1 transition-all duration-300 p-0 mb-1 flex items-center group font-kode-mono"
                   >
                     <User className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2 group-hover:text-blue-500 group-hover:scale-110 transition-all duration-300" />
                     Manage your account
@@ -579,7 +579,7 @@ export default function AccountSettingsPage() {
                 <div className="flex justify-end mt-2 sm:mt-3">
                   <Button 
                     onClick={handleManageAccount}
-                    className="px-3 sm:px-4 py-1 sm:py-1.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors duration-200 hover:bg-blue-700"
+                    className="px-3 sm:px-4 py-1 sm:py-1.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors duration-200 hover:bg-blue-700 font-kode-mono"
                   >
                     Open settings
                   </Button>
