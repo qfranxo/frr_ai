@@ -1396,7 +1396,7 @@ function CommunityContent() {
   }, [searchParams]);
 
   return (
-    <div className="container mx-auto py-5 px-4 md:px-6 min-h-screen">
+    <div className="container mx-auto py-5 px-0 min-h-screen">
       {/* 배경 효과 */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-50/90 via-purple-50/90 to-white" />
@@ -1408,7 +1408,7 @@ function CommunityContent() {
       <div className="relative">
         {/* 헤더 섹션 */}
         <section className="pt-24 sm:pt-28 pb-8 sm:pb-12">
-          <div className="container mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
+          <div className="container mx-auto px-1 sm:px-5 lg:px-7">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1475,8 +1475,8 @@ function CommunityContent() {
             {renderEmptyState() || (
               <Masonry
                 breakpointCols={breakpointColumnsObj}
-                className="flex w-auto -ml-2 sm:-ml-4 md:-ml-6 lg:-ml-8"
-                columnClassName="pl-2 sm:pl-4 md:pl-6 lg:pl-8 bg-clip-padding"
+                className="flex w-full ml-0"
+                columnClassName="pl-0 pr-1 sm:pl-1 sm:pr-2 md:pl-2 md:pr-3 bg-clip-padding"
               >
                 {filteredPosts.map((post) => (
                   <div className="break-inside-avoid mb-6 sm:mb-8 md:mb-10" key={post.id}>
