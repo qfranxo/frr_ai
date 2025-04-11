@@ -215,7 +215,7 @@ export default function Header() {
               className="flex items-center hover:scale-102 transition-transform"
             >
               <span className="text-2xl mr-2"></span>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-rubik-doodle-shadow">
                 Frr AI
               </span>
             </Link>

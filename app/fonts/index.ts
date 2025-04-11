@@ -19,4 +19,17 @@ export const kodeMono = localFont({
   ],
   display: 'swap',
   variable: '--font-kode-mono',
+});
+
+// Rubik Doodle Shadow 폰트 설정
+export const rubikDoodleShadow = localFont({
+  src: [
+    {
+      path: '../../public/fonts/Rubik_Doodle_Shadow/RubikDoodleShadow-Regular.ttf',
+      style: 'normal',
+      weight: '400',
+    },
+  ],
+  display: 'swap',
+  variable: '--font-rubik-doodle-shadow',
 }); 

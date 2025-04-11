@@ -42,6 +42,7 @@ module.exports = {
       },
       fontFamily: {
         'kode-mono': ['var(--font-kode-mono)', 'monospace'],
+        'rubik-doodle-shadow': ['var(--font-rubik-doodle-shadow)', 'cursive'],
       },
     },
   },
