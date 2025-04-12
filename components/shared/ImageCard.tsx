@@ -364,7 +364,7 @@ export function ImageCard({
     '🎨';
   
   return (
-    <div className={`relative ${variant === 'main' ? 'rounded-2xl overflow-hidden shadow-md hover:shadow-xl bg-white group' : 'rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ease-in-out hover:shadow-md group'}`}>
+    <div className={`relative ${variant === 'main' ? 'rounded-2xl overflow-hidden shadow-md hover:shadow-xl bg-white group mb-4' : 'rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ease-in-out hover:shadow-md group mb-5 sm:mb-6'}`}>
       <div className={`relative ${variant === 'community' ? 'p-3 sm:p-4 bg-gray-50' : ''}`}>
         <div 
           className={`relative overflow-hidden ${variant === 'community' ? 'rounded-lg' : ''}`}
@@ -655,10 +655,13 @@ export function ImageCard({
               </div>
               
               {comments.length > 2 && (
-                <div className="text-center mt-1 border-t border-gray-100 pt-1.5">
+                <div className="text-center mt-2 border-t border-gray-100 pt-2">
                   <button 
-                    onClick={() => onComment(post.id)}
-                    className="text-[10px] text-gray-500 hover:text-blue-600 font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onComment(post.id);
+                    }}
+                    className="text-[10px] sm:text-xs text-gray-500 hover:text-blue-600 font-medium py-1.5 px-3 w-full"
                   >
                     View all {comments.length} comments
                   </button>

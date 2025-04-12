@@ -2002,7 +2002,7 @@ function CommunityContent() {
                   }));
                   
                   return (
-                    <div key={`post-${post.id}-${idx}`} className="relative overflow-hidden group">
+                    <div key={`post-${post.id}-${idx}`} className="relative overflow-hidden group mb- sm:mb-0">
                       <ImageCard
                         variant="community"
                         post={post}
