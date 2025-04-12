@@ -37,9 +37,8 @@ function MyApp({ Component, pageProps }: AppProps) {
           }
         }
       }}
-      signInUrl="/"
-      signUpUrl="/"
-      debug={true}
+      signInUrl="/auth/login"
+      signUpUrl="/auth/register"
     >
       <AppContent Component={Component} pageProps={pageProps} />
     </ClerkProvider>

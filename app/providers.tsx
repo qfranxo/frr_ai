@@ -24,6 +24,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           colorTextOnPrimaryBackground: '#fff'
         }
       }}
+      signInUrl="/auth/login"
+      signUpUrl="/auth/register"
     >
       <QueryClientProvider client={queryClient}>
         {children}

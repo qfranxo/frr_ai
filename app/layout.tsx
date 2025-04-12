@@ -37,6 +37,8 @@ export default function RootLayout({
           colorTextOnPrimaryBackground: '#fff'
         }
       }}
+      signInUrl="/auth/login"
+      signUpUrl="/auth/register"
     >
       <html lang="ko" suppressHydrationWarning className={`${kodeMono.variable} ${rubikDoodleShadow.variable}`}>
         <head>
