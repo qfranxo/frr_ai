@@ -110,20 +110,19 @@ const getCategoryColor = (category: string | undefined): string => {
 // 스타일과 프롬프트를 함께 고려하여 카테고리 추출
 const getCategoryFromStyle = (style: string, prompt?: string): string => {
   // 프롬프트가 없고 스타일도 없는 경우 기본값 반환
-  if (!style && !prompt) return 'portrait';
+  if (!style && !prompt) return 'other';
   
   // 프롬프트 분석을 통한 카테고리 판단
   if (prompt) {
-    // 카테고리 키워드 맵핑
+    // 카테고리 키워드 맵핑 - 더 구체적인 키워드 추가
     const categoryKeywords: Record<string, string[]> = {
-      'landscape': ['landscape', 'mountain', 'nature', 'lake', 'forest', 'ocean', 'sea', 'sunset', 'sunrise', 'valley', 'canyon', 'waterfall', 'scenery', 'outdoor', 'natural', 'scenic', 'vista', 'panorama', 'horizon', 'river', 'beach', 'hill', 'sky', 'cloud'],
-      'portrait': ['portrait', 'person', 'face', 'woman', 'man', 'girl', 'boy', 'people', 'human', 'facial', 'self', 'headshot', 'selfie', 'close-up', 'closeup', 'head', 'profile', 'bust'],
-      'urban': ['urban', 'city', 'street', 'building', 'architecture', 'downtown', 'skyscraper', 'metropolis', 'town', 'skyline', 'cityscape', 'infrastructure', 'bridge', 'road'],
-      'anime': ['anime', 'manga', 'cartoon', 'comic', 'animation', 'animated', 'toon', 'chibi', 'japanese animation', 'anime style'],
-      'fantasy': ['fantasy', 'magical', 'dragon', 'fairy', 'elf', 'wizard', 'mythical', 'mystic', 'enchanted', 'creature', 'magic', 'sorcery', 'myth', 'legend'],
-      'sci-fi': ['sci-fi', 'science fiction', 'futuristic', 'robot', 'space', 'alien', 'cyber', 'galaxy', 'neon', 'future', 'spacecraft', 'spaceship', 'technology', 'cyberpunk', 'cyborg', 
-      'dystopian', 'planetary', 'universe', 'stars', 'tech', 'advanced', 'space station', 'space colony', 'futuristic city', 'hologram', 'laser', 'mech', 'artificial intelligence', 'ai', 'digital', 'synthetic'],
-      'vintage': ['vintage', 'retro', 'old', 'classic', 'antique', 'history', 'nostalgic', 'ancient', 'old-fashioned', 'historical', 'sepia', 'aged', 'toned portrait', 'vintage photograph', 'vintage style', 'vintage photo', 'retro style'],
+      'landscape': ['landscape', 'mountain', 'nature', 'lake', 'forest', 'ocean', 'sea', 'sunset', 'sunrise', 'valley', 'canyon', 'waterfall', 'scenery', 'outdoor', 'natural', 'scenic', 'vista', 'panorama', 'horizon', 'river', 'beach', 'hill', 'sky', 'cloud', 'wilderness', 'terrain', 'meadow', 'countryside', 'garden'],
+      'portrait': ['portrait', 'headshot', 'face', 'facial', 'selfie', 'self portrait', 'profile picture', 'profile photo', 'close-up face', 'woman portrait', 'man portrait'],
+      'urban': ['urban', 'city', 'street', 'building', 'architecture', 'downtown', 'skyscraper', 'metropolis', 'town', 'skyline', 'cityscape', 'infrastructure', 'bridge', 'road', 'traffic', 'alleyway', 'avenue', 'boulevard'],
+      'anime': ['anime', 'manga', 'cartoon', 'comic', 'animation', 'animated', 'toon', 'chibi', 'japanese animation', 'anime style', 'anime character', 'manga style', 'anime portrait', 'anime art'],
+      'fantasy': ['fantasy', 'magical', 'dragon', 'fairy', 'elf', 'wizard', 'mythical', 'mystic', 'enchanted', 'creature', 'magic', 'sorcery', 'myth', 'legend', 'fantasy world', 'magical realm', 'fantasy character', 'fairy tale'],
+      'sci-fi': ['sci-fi', 'science fiction', 'futuristic', 'robot', 'space', 'alien', 'cyber', 'galaxy', 'neon', 'future', 'spacecraft', 'spaceship', 'technology', 'cyberpunk', 'cyborg', 'dystopian', 'planetary', 'universe', 'stars', 'tech', 'advanced', 'space station', 'space colony', 'futuristic city', 'hologram', 'laser', 'mech', 'artificial intelligence', 'ai', 'digital', 'synthetic'],
+      'vintage': ['vintage', 'retro', 'old', 'classic', 'antique', 'history', 'nostalgic', 'ancient', 'old-fashioned', 'historical', 'sepia', 'aged', 'toned portrait', 'vintage photograph', 'vintage style', 'vintage photo', 'retro style', 'old school', 'classical', 'timeworn'],
       'abstract': ['abstract', 'geometric', 'pattern', 'colorful', 'modern art', 'non-representational', 'contemporary', 'minimalist', 'conceptual', 'surreal', 'expressionist', 'cubist', 'abstract art', 'shapes', 'lines', 'asymmetrical', 'non-objective', 'experimental', 'color field', 'composition'],
       'animals': ['animal', 'cat', 'dog', 'bird', 'pet', 'wildlife', 'lion', 'tiger', 'elephant', 'zebra', 'bear', 'wolf', 'fox', 'deer', 'horse', 'monkey', 'penguin', 'fish', 'shark', 'whale', 'dolphin', 'reptile', 'snake', 'lizard', 'turtle', 'insect', 'butterfly', 'zoo', 'farm animal'],
       'fashion': ['fashion', 'clothing', 'outfit', 'dress', 'apparel', 'clothes', 'garment', 'accessory', 'jewelry', 'hat', 'shoes', 'bag', 'designer', 'runway', 'collection', 'trend', 'couture', 'fashion model', 'chic', 'stylish', 'trendy', 'vogue', 'fashionable', 'attire', 'wear', 'wardrobe', 'ensemble', 'fashion shoot', 'look', 'fashion photo', 'fashionista', 'jacket', 'coat', 'suit', 'pants', 'skirt', 'blouse', 'shirt', 'lingerie', 'jeans', 'denim', 'haute couture', 'casual wear', 'fashion show', 'catwalk', 'fashion design', 'fashion industry', 'fashion week', 'model', 'photoshoot', 'studio', 'editorial', 'fashion editorial', 'fashion magazine', 'fashion brand', 'boutique', 'elegant', 'luxury']
@@ -131,36 +130,46 @@ const getCategoryFromStyle = (style: string, prompt?: string): string => {
 
     // 카테고리 우선순위 (높은 번호가 더 높은 우선순위)
     const categoryPriority: Record<string, number> = {
-      'vintage': 10,  // vintage에 가장 높은 우선순위 부여
-      'fashion': 8,
-      'sci-fi': 8,
-      'fantasy': 7,
-      'anime': 7,
-      'abstract': 6,
-      'animals': 6,
-      'urban': 5,
-      'landscape': 5,
-      'portrait': 4
+      'portrait': 8,   // 사람 얼굴에 높은 우선순위 부여
+      'anime': 9,      // 애니메이션 스타일에 높은 우선순위
+      'fashion': 8,    // 패션 관련 내용에 높은 우선순위
+      'vintage': 7,    // 빈티지 스타일에 우선순위
+      'sci-fi': 8,     // 공상과학에 높은 우선순위
+      'fantasy': 7,    // 판타지에 높은 우선순위
+      'abstract': 6,   // 추상적 주제에 중간 우선순위
+      'animals': 7,    // 동물 관련 내용에 높은 우선순위
+      'urban': 6,      // 도시 풍경에 중간 우선순위
+      'landscape': 6   // 자연 풍경에 중간 우선순위
     };
     
-    // 프롬프트 소문자 변환
-    const lowerPrompt = prompt.toLowerCase();
+    // 프롬프트 소문자 변환 및 공백 정규화
+    const lowerPrompt = prompt.toLowerCase().replace(/\s+/g, ' ').trim();
     
     // 카테고리별 키워드 매칭 점수
     const scores: Record<string, number> = {};
-    
-    // 각 카테고리별 매칭 점수 계산
-    Object.entries(categoryKeywords).forEach(([category, keywords]) => {
+    Object.keys(categoryKeywords).forEach(category => {
       scores[category] = 0;
+    });
+    
+    // 각 카테고리별 매칭 점수 계산 (개선된 알고리즘)
+    Object.entries(categoryKeywords).forEach(([category, keywords]) => {
+      // 모든 키워드에 대해 검사
       keywords.forEach(keyword => {
-        // 정확한 단어 매칭 (앞뒤에 공백이나 구두점이 있는 경우)
-        const regex = new RegExp(`(^|\\s|[.,!?;])${keyword}(\\s|[.,!?;]|$)`, 'i');
-        if (regex.test(lowerPrompt)) {
-          scores[category] += 2; // 정확한 매칭에는 더 높은 점수
-        } 
-        // 부분 문자열 매칭
+        // 전체 단어 매칭 - 가장 높은 점수
+        const wordRegex = new RegExp(`\\b${keyword}\\b`, 'i');
+        if (wordRegex.test(lowerPrompt)) {
+          // 복합 단어(두 단어 이상)인 경우 추가 점수
+          const wordCount = keyword.split(/\s+/).length;
+          scores[category] += 3 * wordCount; // 정확한 전체 단어 매칭에 높은 점수, 복합 단어는 더 높게
+        }
+        // 시작 또는 끝 매칭 - 중간 점수
+        else if (lowerPrompt.startsWith(keyword) || lowerPrompt.endsWith(keyword)) {
+          scores[category] += 2;
+        }
+        // 부분 매칭 - 낮은 점수
         else if (lowerPrompt.includes(keyword)) {
-          scores[category] += 1;
+          // 짧은 단어(3글자 이하)는 점수 낮게, 4글자 이상은 정상 점수
+          scores[category] += (keyword.length <= 3) ? 0.5 : 1;
         }
       });
       
@@ -168,34 +177,38 @@ const getCategoryFromStyle = (style: string, prompt?: string): string => {
       scores[category] *= categoryPriority[category] || 1.0;
     });
     
-    // 특수 케이스 처리: fashion 관련 구문이 있으면 추가 가중치
-    const fashionPhrases = ['fashion photography', 'fashion shoot', 'fashion model', 'fashion design', 
-                           'fashion show', 'fashion editorial', 'high fashion', 'fashion week',
-                           'studio photography', 'editorial photography'];
+    // 특수 케이스 처리: 구체적인 구문이 있으면 추가 가중치
+    const specialPhrases: Record<string, string[]> = {
+      'portrait': ['professional headshot', 'portrait of a', 'face of a', 'selfie of', 'close-up portrait'],
+      'fashion': ['fashion photography', 'fashion shoot', 'fashion model', 'fashion design', 
+                'fashion show', 'fashion editorial', 'high fashion', 'fashion week',
+                'studio photography', 'editorial photography', 'model wearing'],
+      'sci-fi': ['science fiction', 'sci-fi scene', 'futuristic city', 'space station', 
+                'alien planet', 'cyberpunk', 'cyber city', 'futuristic technology',
+                'space colony', 'space exploration', 'dystopian future'],
+      'anime': ['anime style', 'manga style', 'anime character', 'anime portrait', 'japanese animation style'],
+      'fantasy': ['fantasy world', 'magical world', 'fantasy character', 'enchanted forest', 'medieval fantasy'],
+      'landscape': ['beautiful landscape', 'scenic view', 'nature photography', 'mountain range', 'sunset over'],
+      'urban': ['urban landscape', 'cityscape', 'metropolitan area', 'downtown', 'urban photography'],
+      'vintage': ['old photograph', 'historical photo', 'retro style', 'vintage look', 'antique photograph']
+    };
     
-    for (const phrase of fashionPhrases) {
-      if (lowerPrompt.includes(phrase)) {
-        scores['fashion'] += 5; // 명확한 패션 관련 구문에 높은 가중치 부여
-        break;
+    // 특수 구문 검사 및 추가 점수 부여
+    Object.entries(specialPhrases).forEach(([category, phrases]) => {
+      for (const phrase of phrases) {
+        if (lowerPrompt.includes(phrase)) {
+          scores[category] += 10; // 명확한 구문에 매우 높은 가중치
+          break;
+        }
       }
-    }
+    });
     
-    // sci-fi 관련 구문에 특별 가중치 부여
-    const scifiPhrases = ['science fiction', 'sci-fi scene', 'futuristic city', 'space station', 
-                         'alien planet', 'cyberpunk', 'cyber city', 'futuristic technology',
-                         'space colony', 'space exploration', 'dystopian future', 'futuristic world',
-                         'advanced technology', 'space travel', 'space war', 'future society'];
-                         
-    for (const phrase of scifiPhrases) {
-      if (lowerPrompt.includes(phrase)) {
-        scores['sci-fi'] += 5; // 명확한 sci-fi 관련 구문에 높은 가중치 부여
-        break;
-      }
-    }
+    // 디버깅용 로그 (필요시 주석 해제)
+    // console.log('카테고리 점수:', scores);
     
     // 가장 높은 점수를 가진 카테고리 찾기
-    let bestCategory = 'portrait';
-    let highestScore = 0;
+    let bestCategory = 'other';
+    let highestScore = 3; // 최소 점수 임계값 설정 (이보다 낮으면 'other' 반환)
     
     Object.entries(scores).forEach(([category, score]) => {
       if (score > highestScore) {
@@ -204,13 +217,11 @@ const getCategoryFromStyle = (style: string, prompt?: string): string => {
       }
     });
     
-    // 점수가 0보다 크면 프롬프트 기반 카테고리 반환
-    if (highestScore > 0) {
-      return bestCategory;
-    }
+    // 주요 카테고리에 점수가 있지만 임계값보다 낮으면 'other' 반환
+    return bestCategory;
   }
   
-  // 프롬프트에서 카테고리를 찾지 못한 경우 스타일 기반으로 판단
+  // 스타일 기반 분류 개선 (프롬프트에서 카테고리를 찾지 못한 경우)
   const styleToCategory: Record<string, string> = {
     'portrait': 'portrait',
     'anime': 'anime', 
@@ -234,19 +245,50 @@ const getCategoryFromStyle = (style: string, prompt?: string): string => {
     'fashion': 'fashion',
     'studio': 'fashion',
     'editorial': 'fashion',
-    'lookbook': 'fashion'
+    'lookbook': 'fashion',
+    'manga': 'anime',
+    'cartoon': 'anime',
+    'illustration': 'fantasy',
+    'cinematic': 'portrait',
+    'photograph': 'portrait',
+    'photo': 'portrait',
+    'watercolor': 'abstract',
+    'architectural': 'urban',
+    'building': 'urban',
+    'city': 'urban',
+    'nature': 'landscape',
+    'natural': 'landscape',
+    'scenery': 'landscape',
+    'wildlife': 'animals',
+    'pet': 'animals',
+    'dog': 'animals',
+    'cat': 'animals',
+    'bird': 'animals'
   };
 
-  // 정확한 매치 확인
-  if (style && styleToCategory[style.toLowerCase()]) {
-    return styleToCategory[style.toLowerCase()];
-  }
-  
-  // 부분 매치 확인
+  // 스타일 값이 있으면 해당 값으로 매칭 시도
   if (style) {
-    for (const [key, value] of Object.entries(styleToCategory)) {
-      if (style.toLowerCase().includes(key.toLowerCase())) {
-        return value;
+    // 정확한 매치 확인
+    const styleKey = style.toLowerCase();
+    if (styleToCategory[styleKey]) {
+      return styleToCategory[styleKey];
+    }
+    
+    // 부분 매치 확인 (더 정확한 단어 우선)
+    const matchedStyles = Object.entries(styleToCategory)
+      .filter(([key]) => styleKey.includes(key))
+      .sort((a, b) => b[0].length - a[0].length);  // 더 긴 키워드가 앞에 오도록
+    
+    if (matchedStyles.length > 0) {
+      return matchedStyles[0][1];  // 가장 긴 일치 키워드의 카테고리 반환
+    }
+    
+    // 프롬프트가 있으면 프롬프트를 이용해 다시 시도
+    if (prompt) {
+      // 이 함수를 재귀적으로 호출하여 프롬프트만으로 판단
+      const promptOnlyCategory = getCategoryFromStyle('', prompt);
+      if (promptOnlyCategory !== 'other') {
+        return promptOnlyCategory;
       }
     }
   }

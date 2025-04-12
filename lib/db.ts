@@ -199,7 +199,9 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
           created_at: new Date(),
           last_reset_at: new Date(),
           is_active: true,
-          auto_renew: true
+          auto_renew: true,
+          cancelled: false,
+          refunded: false
         });
       
       if (insertError) {
@@ -314,7 +316,9 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
           created_at: new Date(),
           last_reset_at: new Date(),
           is_active: true,
-          auto_renew: true
+          auto_renew: true,
+          cancelled: false,
+          refunded: false
         });
       
       if (insertError) {
@@ -422,6 +426,27 @@ export async function upgradeSubscription(userId: string): Promise<SubscriptionI
     // Cache the updated subscription
     usersSubscriptions.set(userId, subscriptionInfo);
     saveToStorage(); // 변경사항 저장
+    
+    // Update Supabase subscription
+    try {
+      const { error: updateError } = await supabase
+        .from('subscriptions')
+        .update({
+          plan: 'premium',
+          next_renewal_date: renewalDate,
+          is_active: true,
+          auto_renew: true,
+          billing_cycle: 'monthly'
+        })
+        .eq('user_id', userId);
+      
+      if (updateError) {
+        console.error('Error updating subscription in Supabase:', updateError);
+        // We still proceed with local update even if server update fails
+      }
+    } catch (dbError) {
+      console.error('Database update error:', dbError);
+    }
     
     console.log(`Successfully upgraded subscription for user ***마스킹됨*** to premium`);
     return subscriptionInfo;

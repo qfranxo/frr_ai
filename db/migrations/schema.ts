@@ -63,14 +63,20 @@ import {
     createdAt: timestamp('created_at').defaultNow(),
   });
   
-  // --- User Subscriptions ---
-  export const userSubscriptions = pgTable('user_subscriptions', {
+  // --- Subscriptions ---
+  export const subscriptions = pgTable('subscriptions', {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id').references(() => users.id),
-    plan: varchar('plan', { length: 20 }),
-    startedAt: timestamp('started_at').defaultNow(),
-    expiresAt: timestamp('expires_at'),
-    isActive: boolean('is_active').default(true),
+    user_id: uuid('user_id'),
+    plan: text('plan'),
+    billing_cycle: text('billing_cycle'),
+    auto_renew: boolean('auto_renew'),
+    next_renewal_date: timestamp('next_renewal_date'),
+    cancelled: boolean('cancelled'),
+    created_at: timestamp('created_at').defaultNow(),
+    usage_count: numeric('usage_count'),
+    last_reset_at: timestamp('last_reset_at'),
+    is_active: boolean('is_active').default(true),
+    refunded: boolean('refunded'),
   });
   
   // --- Shared Images ---
