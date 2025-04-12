@@ -4,19 +4,26 @@ import { NextResponse } from "next/server";
 // 공개 접근 가능한 경로 패턴
 const publicPaths = [
   "/", 
-  "/sign-in(.*)",
-  "/sign-up(.*)",
+  "/sign-in",
+  "/sign-up",
   "/auth/login(.*)",
   "/auth/register(.*)",
   "/sso-callback(.*)",
-  "/api/public(.*)"
+  "/api/public(.*)",
+  "/api/(.*)",
+  "/pricing",
+  "/about",
+  "/community"
 ];
 
 // 경로가 공개 접근 가능한지 확인하는 함수
-function isPublic(path: string) {
-  return publicPaths.find((pattern) => {
-    const regex = new RegExp(`^${pattern.replace(/\(\.\*\)/g, ".*")}$`);
-    return regex.test(path);
+const isPublic = (path: string) => {
+  return publicPaths.some(publicPath => {
+    if (publicPath.endsWith("(.*)")) {
+      const base = publicPath.slice(0, -4);
+      return path.startsWith(base);
+    }
+    return publicPath === path;
   });
 }
 
