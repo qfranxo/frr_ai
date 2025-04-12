@@ -36,10 +36,10 @@ export default function RootLayout({
           colorTextOnPrimaryBackground: '#fff'
         }
       }}
-      signInUrl="/auth/login"
-      signUpUrl="/auth/register"
-      afterSignInUrl="/"
-      afterSignUpUrl="/"
+      signInUrl="https://accounts.frrai.com/sign-in"
+      signUpUrl="https://accounts.frrai.com/sign-up"
+      afterSignInUrl="https://frrai.com"
+      afterSignUpUrl="https://frrai.com"
     >
       <html lang="ko" suppressHydrationWarning className={`${kodeMono.variable} ${rubikDoodleShadow.variable}`}>
         <head>

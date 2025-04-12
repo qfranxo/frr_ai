@@ -10,7 +10,7 @@ export default function SSOCallback() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       // 로그인 완료 후 메인 페이지로 리다이렉트
-      router.push('/');
+      router.push('https://frrai.com');
     }, 1500);
 
     return () => clearTimeout(timeout);
