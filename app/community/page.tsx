@@ -800,14 +800,21 @@ function CommunityContent() {
       
       if (response.ok && data.success) {
         // 서버에서 반환된 실제 댓글 ID로 낙관적 업데이트했던 임시 ID 교체
-        console.log(`[댓글 추가 성공] 임시 ID를 실제 ID로 교체: ${tempId} -> ${data.data.id}`);
+        console.log(`[댓글 API 응답] 데이터 확인:`, data.data);
+        
+        // 서버 응답에서 배열인지 확인하고 첫 번째 항목 추출
+        const commentData = Array.isArray(data.data) && data.data.length > 0 
+          ? data.data[0] 
+          : data.data;
+        
+        console.log(`[댓글 추가 성공] 임시 ID를 실제 ID로 교체: ${tempId} -> ${commentData.id}`);
         
         // commentsMap 업데이트
         setCommentsMap(prev => ({
           ...prev,
           [postId]: prev[postId].map(c => 
             c.id === tempId 
-              ? { ...c, id: data.data.id, createdAt: data.data.createdAt } 
+              ? { ...c, id: commentData.id, createdAt: commentData.createdAt } 
               : c
           )
         }));
@@ -817,8 +824,8 @@ function CommunityContent() {
           if (c.id === tempId) {
             return {
               ...c,
-              id: data.data.id,
-              createdAt: data.data.createdAt
+              id: commentData.id,
+              createdAt: commentData.createdAt
             };
           }
           return c;
@@ -864,12 +871,31 @@ function CommunityContent() {
   
   // 댓글 삭제 핸들러 업데이트
   const handleDeleteComment = async (postId: string, commentId: string) => {
+    // 백업 데이터 변수 정의
+    let originalCommentsMapData: Comment[] = [];
+    let originalPostComments: Comment[] = [];
+    
     try {
-      // 낙관적 UI 업데이트
-      setCommentsMap(prev => ({
-        ...prev,
-        [postId]: prev[postId].filter(c => c.id !== commentId)
-      }));
+      console.log(`[댓글 삭제] 시작: postId=${postId}, commentId=${commentId}`);
+      
+      // 원본 데이터 백업 (삭제 실패 시 복구용)
+      originalCommentsMapData = commentsMap[postId] ? JSON.parse(JSON.stringify(commentsMap[postId])) : [];
+      const originalPostData = communityData.find(p => p.id === postId);
+      originalPostComments = originalPostData?.comments ? JSON.parse(JSON.stringify(originalPostData.comments)) : [];
+      
+      console.log(`[댓글 삭제] 데이터 백업 완료: 댓글 ${originalCommentsMapData.length}개`);
+      
+      // 낙관적 UI 업데이트 - prev[postId]가 존재하는지 체크 추가
+      setCommentsMap(prev => {
+        if (!prev[postId]) {
+          console.log(`[댓글 삭제] 주의: commentsMap에 postId=${postId}에 대한 데이터가 없음`);
+          return prev;
+        }
+        return {
+          ...prev,
+          [postId]: prev[postId].filter(c => c.id !== commentId)
+        };
+      });
       
       // 게시글 데이터의 댓글 정보도 함께 업데이트
       setCommunityData(prev => prev.map(post => {
@@ -893,24 +919,127 @@ function CommunityContent() {
         commentId: ''
       });
       
-      const response = await fetch(`/api/comments/${commentId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // API 호출을 위한 재시도 로직 추가 (최대 3번)
+      let retryCount = 0;
+      const maxRetries = 2;
+      let response = null;
+      let responseData = null;
       
-      if (response.ok) {
+      while (retryCount <= maxRetries) {
+        try {
+          console.log(`[댓글 API 호출] DELETE /api/comments/${commentId} 시작 (시도: ${retryCount + 1}/${maxRetries + 1})`);
+          response = await fetch(`/api/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log(`[댓글 API 응답] 상태 코드: ${response.status}`);
+          
+          // API 응답 데이터 파싱
+          try {
+            responseData = await response.json();
+            console.log(`[댓글 API 응답] 데이터:`, responseData);
+            break; // 성공하면 재시도 루프 탈출
+          } catch (parseError) {
+            console.error(`[댓글 API 응답] JSON 파싱 오류:`, parseError);
+            
+            // 응답이 성공이면서 JSON이 없는 경우 (빈 응답)
+            if (response.ok) {
+              responseData = { success: true };
+              break; // 성공으로 간주하고 루프 탈출
+            }
+            
+            // 파싱 오류면서 마지막 시도였다면 예외 발생
+            if (retryCount === maxRetries) {
+              throw new Error(`API 응답 파싱 오류: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+            }
+          }
+          
+          // 서버 응답이 성공이면 재시도 루프 탈출
+          if (response.ok) {
+            break;
+          }
+          
+          // 5xx 서버 오류인 경우만 재시도 (4xx는 재시도해도 의미 없음)
+          if (response.status >= 500 && retryCount < maxRetries) {
+            retryCount++;
+            console.log(`[댓글 API 호출] 서버 오류로 재시도 (${retryCount}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기 후 재시도
+            continue;
+          }
+          
+          // 재시도할 수 없는 오류면 예외 발생
+          throw new Error(responseData?.error || `API 호출 실패 (상태 코드: ${response.status})`);
+        } catch (fetchError) {
+          // 네트워크 오류 등이 발생했고 재시도 횟수가 남아있으면 재시도
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.log(`[댓글 API 호출] 네트워크 오류로 재시도 (${retryCount}/${maxRetries}):`, fetchError);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기 후 재시도
+          } else {
+            // 모든 재시도 실패 시 예외 발생
+            throw fetchError;
+          }
+        }
+      }
+      
+      // 최종 응답 확인
+      if (response && response.ok) {
+        console.log(`[댓글 삭제 성공] commentId=${commentId}`);
         toast.success('Comment deleted successfully');
       } else {
-        throw new Error('API 호출 실패');
+        console.error(`[댓글 삭제 실패] API 응답 오류:`, responseData);
+        throw new Error(responseData?.error || `API 호출 실패 (상태 코드: ${response?.status || 'unknown'})`);
       }
     } catch (error) {
-      console.error('댓글 삭제 오류:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[댓글 삭제 오류]', errorMessage, error);
       toast.error('Failed to delete comment');
       
       // 삭제 실패 시 원래대로 복구
-      await fetchData();
+      console.log('[댓글 삭제 실패] 데이터 복구 시작');
+      
+      try {
+        // 백업 데이터가 있으면 로컬 상태 복구 시도
+        if (originalCommentsMapData.length > 0) {
+          console.log('[댓글 삭제 실패] commentsMap 복구 시도');
+          setCommentsMap(prev => ({
+            ...prev,
+            [postId]: originalCommentsMapData
+          }));
+          
+          // 게시글 데이터 내 댓글도 복구
+          setCommunityData(prev => 
+            prev.map(post => {
+              if (post.id === postId) {
+                return {
+                  ...post,
+                  comments: originalPostComments
+                };
+              }
+              return post;
+            })
+          );
+          
+          console.log('[댓글 삭제 실패] 로컬 데이터 복구 완료');
+        } else {
+          // 백업 데이터가 없거나 불완전하면 서버에서 다시 가져오기
+          console.log('[댓글 삭제 실패] 백업 데이터 불충분, 서버에서 다시 로드');
+          await fetchData();
+        }
+      } catch (recoveryError) {
+        console.error('[댓글 삭제 복구 실패]', recoveryError);
+        // 복구 실패 시 최후의 수단으로 전체 데이터 다시 로드
+        try {
+          console.log('[댓글 삭제 복구 실패] 전체 데이터 다시 로드 시도');
+          await fetchData();
+        } catch (finalError) {
+          console.error('[댓글 삭제 복구 최종 실패]', finalError);
+          toast.error('Error recovering data. Please refresh the page.');
+        }
+      }
     }
   };
 
@@ -1001,18 +1130,10 @@ function CommunityContent() {
     try {
       if (!postId) return defaultComments;
       
-      console.log(`[getPostComments] 요청된 postId: ${postId}`);
-      
       // 1. 게시물 객체에서 직접 comments 속성을 먼저 확인
       const post = communityData.find(p => p.id === postId);
-      console.log(`[getPostComments] 게시물 존재 여부:`, !!post);
-      console.log(`[getPostComments] post.comments 타입:`, post?.comments ? typeof post.comments : '없음');
-      console.log(`[getPostComments] post.comments 배열 여부:`, post?.comments ? Array.isArray(post.comments) : '없음');
       
       if (post?.comments && Array.isArray(post.comments)) {
-        console.log(`[getPostComments] post.comments 길이:`, post.comments.length);
-        console.log(`[getPostComments] 첫 번째 댓글 데이터:`, post.comments.length > 0 ? post.comments[0] : '댓글 없음');
-        
         // 댓글 데이터 유효성 확인 및 content/text 필드 호환성 처리
         return post.comments.map(comment => {
           const result = { ...comment };
@@ -1027,14 +1148,7 @@ function CommunityContent() {
       }
       
       // 2. 그 다음 commentsMap에서 확인
-      console.log(`[getPostComments] commentsMap 확인:`, !!commentsMap);
-      console.log(`[getPostComments] commentsMap[postId] 존재 여부:`, !!commentsMap[postId]);
-      console.log(`[getPostComments] commentsMap[postId] 배열 여부:`, commentsMap[postId] ? Array.isArray(commentsMap[postId]) : '없음');
-      
       if (commentsMap && commentsMap[postId] && Array.isArray(commentsMap[postId])) {
-        console.log(`[getPostComments] commentsMap[postId] 길이:`, commentsMap[postId].length);
-        console.log(`[getPostComments] commentsMap 첫 번째 댓글:`, commentsMap[postId].length > 0 ? commentsMap[postId][0] : '댓글 없음');
-        
         return commentsMap[postId].map(comment => {
           const result = { ...comment };
           // content와 text 필드 간 호환성 처리
@@ -1048,7 +1162,6 @@ function CommunityContent() {
       }
       
       // 3. 해당되는 댓글이 없으면 빈 배열 반환
-      console.log(`[getPostComments] 댓글을 찾을 수 없어 기본값 반환`);
       return defaultComments;
     } catch (error) {
       console.error('[getPostComments] 댓글 정보 가져오기 오류:', error);
