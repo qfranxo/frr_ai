@@ -291,8 +291,10 @@ export default function PricingPage() {
   // Handle upgrade to Premium
   const handleUpgrade = async () => {
     if (!isSignedIn) {
-      // 호스팅된 UI URL로 리다이렉트 
-      window.location.href = 'https://steady-treefrog-25.clerk.accounts.dev/sign-in';
+      // 호스팅된 UI URL로 리다이렉트 대신 Clerk의 SignInButton 사용 
+      // 모달 인증 창 표시
+      toast.info("Please sign in to upgrade your subscription");
+      // 직접 리다이렉트 하지 않고 return 처리
       return;
     }
     

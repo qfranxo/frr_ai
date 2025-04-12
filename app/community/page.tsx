@@ -699,48 +699,49 @@ function CommunityContent() {
 
   // 최초 로드를 위한 스토리지 API 접근 함수
   const preloadComments = async (postIds: string[]) => {
-    if (!postIds.length) return {};
-    
     try {
-      // 배치 처리를 위한 설정
-      const BATCH_SIZE = 5; // 한 번에 처리할 요청 수
-      const commentsMap: Record<string, Comment[]> = {};
-      
-      // 캐시에서 먼저 데이터 로드
-      let remainingPostIds = [...postIds];
-      for (const postId of postIds) {
-        const cachedComments = loadCommentsFromCache(postId);
-        if (cachedComments && cachedComments.length > 0) {
-          commentsMap[postId] = cachedComments;
-          // 이미 캐시에서 로드한 ID는 요청 목록에서 제거
-          remainingPostIds = remainingPostIds.filter(id => id !== postId);
-        }
+      if (!Array.isArray(postIds) || postIds.length === 0) {
+        return {};
       }
       
-      // 캐시에서 로드하지 못한 ID만 배치 처리
+      // 게시물 ID 중복 제거
+      const uniquePostIds = [...new Set(postIds)];
+      
+      // 이미 로드된 댓글은 건너뛰기
+      const remainingPostIds = uniquePostIds.filter(id => !commentsLocalMap[id] || commentsLocalMap[id].length === 0);
+      
+      if (remainingPostIds.length === 0) {
+        // 모든 게시물에 대한 댓글이 이미 로드됨
+        return commentsLocalMap;
+      }
+      
+      // 모든 댓글 맵 객체
+      const commentsMap: Record<string, Comment[]> = { ...commentsLocalMap };
+      
+      // 배치 처리 크기
+      const BATCH_SIZE = 5;
+      
+      // 배치로 처리
       for (let i = 0; i < remainingPostIds.length; i += BATCH_SIZE) {
         const batch = remainingPostIds.slice(i, i + BATCH_SIZE);
         
-        // 배치 내 모든 요청 동시 실행
-        const batchPromises = batch.map(id => 
-          communityApi.loadCommentsForImage(id)
-            .catch(error => {
-              console.error(`댓글 로드 오류 (ID: ${id}):`, error);
-              return { success: false, data: [], error: String(error) };
-            })
+        // 병렬 요청 생성
+        const batchPromises = batch.map(
+          postId => communityApi.loadCommentsForImage(postId)
         );
         
         // 배치 단위로 처리 (병렬 요청 수 제한)
         const batchResults = await Promise.all(batchPromises);
         
         // 결과 처리
-        batchResults.forEach((result, index) => {
+        batchResults.forEach((comments, index) => {
           const postId = batch[index];
           
-          if (result.success && Array.isArray(result.data)) {
+          // 반환 타입이 Comment[] 배열인지 확인
+          if (Array.isArray(comments)) {
             // 모든 댓글에 대해 normalizeComment 적용
-            const normalizedComments = result.data.map((comment: any) => normalizeComment(comment))
-              .sort((a, b) => {
+            const normalizedComments = comments.map((comment: any) => normalizeComment(comment))
+              .sort((a: Comment, b: Comment) => {
                 try {
                   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                 } catch {
@@ -923,36 +924,60 @@ function CommunityContent() {
       
       // 댓글 데이터 로드
       communityApi.loadCommentsForImage(postId)
-        .then(result => {
-          if (result.success && Array.isArray(result.data)) {
-            const comments = result.data.map((comment: any) => normalizeComment(comment))
-              .sort((a, b) => {
+        .then(comments => {
+          // 반환된 결과가 Comment[] 배열인지 확인
+          if (Array.isArray(comments)) {
+            const normalizedComments = comments.map((comment: any) => normalizeComment(comment))
+              .sort((a: Comment, b: Comment) => {
                 try {
                   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                 } catch {
                   return 0;
                 }
               });
-              
-            // 로드된 댓글 설정
+            
+            // 댓글 상태 업데이트
             setCommentsLocalMap(prev => ({
               ...prev,
-              [postId]: comments
+              [postId]: normalizedComments
             }));
             
-            // 캐시에 저장
-            saveCommentsToCache(postId, comments);
+            // 캐시 업데이트
+            saveCommentsToCache(postId, normalizedComments);
+            
+            // 원래 훅의 함수로 상태 업데이트
+            if (openCommentModal) {
+              openCommentModal(postId);
+            }
+          } else {
+            // 댓글이 없거나 오류가 발생한 경우 빈 배열로 설정
+            setCommentsLocalMap(prev => ({
+              ...prev,
+              [postId]: []
+            }));
+            
+            // 원래 훅의 함수로 상태 업데이트
+            if (openCommentModal) {
+              openCommentModal(postId);
+            }
           }
+          
+          setIsCommentLoading(false);
         })
         .catch(error => {
-          console.error("댓글 로드 오류:", error);
+          console.error("댓글 로드 중 오류:", error);
+          
           // 오류 발생 시 빈 배열로 설정
           setCommentsLocalMap(prev => ({
             ...prev,
             [postId]: []
           }));
-        })
-        .finally(() => {
+          
+          // 원래 훅의 함수로 상태 업데이트
+          if (openCommentModal) {
+            openCommentModal(postId);
+          }
+          
           setIsCommentLoading(false);
         });
     }
@@ -978,34 +1003,35 @@ function CommunityContent() {
     windowAny[loadingKey] = true;
     
     try {
-      const result = await communityApi.loadCommentsForImage(postId);
+      const comments = await communityApi.loadCommentsForImage(postId);
       
-      if (result.success && Array.isArray(result.data)) {
-        const comments = result.data.map((comment: any) => normalizeComment(comment))
-          .sort((a, b) => {
+      // 반환된 결과가 Comment[] 배열인지 확인
+      if (Array.isArray(comments)) {
+        const normalizedComments = comments.map((comment: any) => normalizeComment(comment))
+          .sort((a: Comment, b: Comment) => {
             try {
               return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             } catch {
               return 0;
             }
           });
-          
+        
         // 기존 댓글과 새 댓글이 다른 경우에만 업데이트
         const existingComments = commentsLocalMap[postId] || [];
-        const hasNewComments = comments.length !== existingComments.length || 
-          JSON.stringify(comments.map(c => c.id)) !== JSON.stringify(existingComments.map(c => c.id));
-          
+        const hasNewComments = normalizedComments.length !== existingComments.length || 
+          JSON.stringify(normalizedComments.map((c: Comment) => c.id)) !== JSON.stringify(existingComments.map((c: Comment) => c.id));
+        
         if (hasNewComments) {
           setCommentsLocalMap(prev => ({
             ...prev,
-            [postId]: comments
+            [postId]: normalizedComments
           }));
           
           // 캐시 업데이트
-          saveCommentsToCache(postId, comments);
+          saveCommentsToCache(postId, normalizedComments);
           
           // 추가 로그: 댓글 개수 변화 표시
-          console.log(`댓글 백그라운드 업데이트 (${postId}): ${existingComments.length} -> ${comments.length}`);
+          console.log(`댓글 백그라운드 업데이트 (${postId}): ${existingComments.length} -> ${normalizedComments.length}`);
         }
       }
     } catch (error) {

@@ -1491,7 +1491,7 @@ function GenerateContent() {
             )}
           </button>
         ) : (
-          <SignUpButton mode="modal" fallbackRedirectUrl="/generate">
+          <SignUpButton mode="modal">
             <button 
               className="w-full h-12 md:h-14 rounded-xl flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-xl hover:shadow-2xl font-medium text-sm md:text-base"
             >
