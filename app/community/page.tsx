@@ -821,10 +821,105 @@ function CommunityContent() {
   const openCommentModalCustom = (postId: string) => {
     setSelectedPostId(postId);
     
-    // 원래 훅의 함수로 상태 업데이트
+    // 1. 이미 commentsLocalMap에 해당 게시물 댓글이 있는지 확인
+    const hasExistingComments = commentsLocalMap[postId] && commentsLocalMap[postId].length > 0;
+    
+    // 2. 캐시에서 댓글 로드 시도
+    if (!hasExistingComments) {
+      const cachedComments = loadCommentsFromCache(postId);
+      
+      if (cachedComments && cachedComments.length > 0) {
+        // 캐시에서 댓글을 찾은 경우 - 즉시 상태 업데이트
+        setCommentsLocalMap(prev => ({
+          ...prev,
+          [postId]: cachedComments
+        }));
+        
+        // 원래 훅의 함수로 상태 업데이트 (로딩 없이 즉시 모달 표시)
+        if (openCommentModal) {
+          openCommentModal(postId);
+        }
+        
+        // 백그라운드에서 최신 데이터 로드 (사용자는 이미 캐시된 댓글을 보고 있음)
+        fetchCommentsInBackground(postId);
+        return;
+      }
+      
+      // 캐시에도 없고 로컬 상태에도 없는 경우 - 로딩 표시 후 데이터 가져오기
+      setIsCommentLoading(true);
+      
+      // 댓글 데이터 로드
+      communityApi.loadCommentsForImage(postId)
+        .then(result => {
+          if (result.success && Array.isArray(result.data)) {
+            const comments = result.data.map((comment: any) => normalizeComment(comment))
+              .sort((a, b) => {
+                try {
+                  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                } catch {
+                  return 0;
+                }
+              });
+              
+            // 로드된 댓글 설정
+            setCommentsLocalMap(prev => ({
+              ...prev,
+              [postId]: comments
+            }));
+            
+            // 캐시에 저장
+            saveCommentsToCache(postId, comments);
+          }
+        })
+        .catch(error => {
+          console.error("댓글 로드 오류:", error);
+          // 오류 발생 시 빈 배열로 설정
+          setCommentsLocalMap(prev => ({
+            ...prev,
+            [postId]: []
+          }));
+        })
+        .finally(() => {
+          setIsCommentLoading(false);
+        });
+    }
+    
+    // 원래 훅의 함수로 상태 업데이트 (모달은 즉시 표시)
     if (openCommentModal) {
       openCommentModal(postId);
     }
+  };
+
+  // 백그라운드에서 댓글 데이터 업데이트 (사용자 경험에 영향 없이)
+  const fetchCommentsInBackground = (postId: string) => {
+    communityApi.loadCommentsForImage(postId)
+      .then(result => {
+        if (result.success && Array.isArray(result.data)) {
+          const comments = result.data.map((comment: any) => normalizeComment(comment))
+            .sort((a, b) => {
+              try {
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              } catch {
+                return 0;
+              }
+            });
+            
+          // 기존 댓글과 새 댓글이 다른 경우에만 업데이트
+          const existingComments = commentsLocalMap[postId] || [];
+          if (JSON.stringify(existingComments) !== JSON.stringify(comments)) {
+            setCommentsLocalMap(prev => ({
+              ...prev,
+              [postId]: comments
+            }));
+            
+            // 캐시 업데이트
+            saveCommentsToCache(postId, comments);
+          }
+        }
+      })
+      .catch(error => {
+        console.error("백그라운드 댓글 업데이트 오류:", error);
+      });
   };
 
   const closeCommentModalCustom = () => {
@@ -1219,25 +1314,49 @@ function CommunityContent() {
   
   // 컴포넌트 상태에서 해당 postId의 댓글 목록 획득
   const getPostComments = (postId: string | undefined, defaultComments: any[] = []): Comment[] => {
-    if (!postId) return defaultComments.map(comment => normalizeComment(comment) as Comment);
-
-    const comments = commentsLocalMap[postId] || defaultComments;
+    if (!postId) return defaultComments;
     
-    // 모든 댓글에 author 필드가 있는지 확인하고 없으면 추가
-    return comments.map(comment => {
-      // 필수 필드가 있는지 확인하고 없으면 추가
-      const normalizedComment: Comment = {
-        id: comment.id,
-        text: comment.text || comment.content || '',
-        content: comment.content || comment.text || '',
-        author: comment.author || comment.userName || '사용자',
-        createdAt: comment.createdAt || new Date().toISOString(),
-        imageId: comment.imageId || postId,
-        userId: comment.userId || '', // userId 속성만 사용 (user_id 제거)
-        userName: comment.userName || comment.author || ''
-      };
-      return normalizedComment;
-    });
+    // 1. 로컬 상태에서 댓글 검색
+    const localComments = commentsLocalMap[postId];
+    if (localComments && Array.isArray(localComments) && localComments.length > 0) {
+      // 최신순으로 정렬하여 반환
+      return localComments.sort((a, b) => {
+        try {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } catch {
+          return 0;
+        }
+      });
+    }
+    
+    // 2. 원래 훅 상태에서 댓글 검색
+    const hookComments = commentsMap[postId];
+    if (hookComments && Array.isArray(hookComments) && hookComments.length > 0) {
+      // 최신순으로 정렬하여 반환
+      return hookComments.sort((a, b) => {
+        try {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } catch {
+          return 0;
+        }
+      });
+    }
+    
+    // 3. 게시물 객체에서 댓글 검색
+    const post = communityData.find(p => p.id === postId);
+    if (post && post.comments && Array.isArray(post.comments) && post.comments.length > 0) {
+      // 최신순으로 정렬하여 반환
+      return post.comments.sort((a, b) => {
+        try {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        } catch {
+          return 0;
+        }
+      });
+    }
+    
+    // 4. 기본값 반환 (일반적으로 빈 배열)
+    return defaultComments;
   };
   
   // 다운로드 핸들러 추가
@@ -1589,6 +1708,53 @@ function CommunityContent() {
     return () => {};
   }, [filteredData]);
 
+  // 코드 상단에 댓글 캐싱을 위한 상수 추가
+  const COMMENTS_CACHE_PREFIX = 'comments_cache_';
+  const COMMENTS_CACHE_EXPIRY = 10 * 60 * 1000; // 10분 캐시 유효시간
+
+  // 캐시에서 댓글 로드하는 함수 추가
+  const loadCommentsFromCache = (postId: string): Comment[] | null => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const cacheKey = `${COMMENTS_CACHE_PREFIX}${postId}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const timestamp = localStorage.getItem(`${cacheKey}_timestamp`);
+      
+      if (!cachedData || !timestamp) return null;
+      
+      const now = Date.now();
+      const cacheTime = parseInt(timestamp, 10);
+      
+      // 캐시 만료 시간 체크
+      if (now - cacheTime > COMMENTS_CACHE_EXPIRY) {
+        // 캐시 만료됨
+        return null;
+      }
+      
+      return JSON.parse(cachedData);
+    } catch (error) {
+      console.error('댓글 캐시 로드 오류:', error);
+      return null;
+    }
+  };
+
+  // 캐시에 댓글 저장하는 함수 추가
+  const saveCommentsToCache = (postId: string, comments: Comment[]) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const cacheKey = `${COMMENTS_CACHE_PREFIX}${postId}`;
+      localStorage.setItem(cacheKey, JSON.stringify(comments));
+      localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString());
+    } catch (error) {
+      console.error('댓글 캐시 저장 오류:', error);
+    }
+  };
+
+  // 댓글 모달 열기 함수 개선
+  const [isCommentLoading, setIsCommentLoading] = useState<boolean>(false);
+
   return (
     <div className="container mx-auto py-5 px-0 min-h-screen">
       {/* 배경 효과 */}
@@ -1774,25 +1940,25 @@ function CommunityContent() {
                   : ''
               }`}
             >
-              {getPostComments(selectedPostId).length > 0 ? 
-                // 댓글을 최신순으로 정렬
-                [...getPostComments(selectedPostId)]
-                  .sort((a, b) => {
-                    try {
-                      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-                      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-                      
-                      // 유효한 날짜인지 확인
-                      const timeA = !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
-                      const timeB = !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
-                      
-                      return timeB - timeA;
-                    } catch (error) {
-                      return 0;
-                    }
-                  })
-                  .map((comment) => (
-                <div key={comment.id} className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5 bg-gray-50 rounded-2xl hover:bg-gray-100/80 transition-colors">
+              {/* 로딩 상태 */}
+              {isCommentLoading && (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-sm text-gray-500">댓글을 불러오는 중...</p>
+                </div>
+              )}
+              
+              {/* 댓글이 없는 경우 */}
+              {!isCommentLoading && getPostComments(selectedPostId).length === 0 && (
+                <div className="text-center py-4 sm:py-6 text-gray-500">
+                  <p className="text-xs sm:text-sm">No comments yet.</p>
+                  <p className="text-[10px] sm:text-xs mt-1">Be the first to leave a comment!</p>
+                </div>
+              )}
+              
+              {/* 댓글 목록 */}
+              {!isCommentLoading && getPostComments(selectedPostId).map((comment, index) => (
+                <div key={comment.id || index} className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5 bg-gray-50 rounded-2xl hover:bg-gray-100/80 transition-colors">
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1 sm:mb-2">
                       <span className="text-xs sm:text-sm font-medium text-gray-900">{getCommentAuthorName(comment.userName)}</span>
@@ -1823,12 +1989,7 @@ function CommunityContent() {
                     </button>
                   )}
                 </div>
-              )) : (
-                <div className="text-center py-4 sm:py-6 text-gray-500">
-                  <p className="text-xs sm:text-sm">No comments yet.</p>
-                  <p className="text-[10px] sm:text-xs mt-1">Be the first to leave a comment!</p>
-                </div>
-              )}
+              ))}
             </div>
             
             {/* 댓글 입력 폼 */}

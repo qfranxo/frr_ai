@@ -29,6 +29,15 @@ export default function LoginPage() {
             routing="path"
             signUpUrl="/auth/register"
             fallbackRedirectUrl="/"
+            appearance={{
+              elements: {
+                formButtonPrimary: "bg-blue-600 hover:bg-blue-700 text-white",
+                formFieldInput: "rounded-xl border-gray-300"
+              },
+              variables: {
+                colorPrimary: "#2563eb"
+              }
+            }}
           />
 
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">

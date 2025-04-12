@@ -22,10 +22,24 @@ function MyApp({ Component, pageProps }: AppProps) {
         variables: { 
           colorPrimary: '#2563eb',
           colorTextOnPrimaryBackground: '#fff'
+        },
+        elements: {
+          formButtonPrimary: {
+            fontSize: '14px',
+            textTransform: 'none',
+            fontWeight: 'normal'
+          },
+          card: {
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+          },
+          formFieldInput: {
+            autocomplete: 'on'
+          }
         }
       }}
-      signInFallbackRedirectUrl="/"
-      signUpFallbackRedirectUrl="/"
+      signInUrl="/"
+      signUpUrl="/"
+      debug={true}
     >
       <AppContent Component={Component} pageProps={pageProps} />
     </ClerkProvider>
