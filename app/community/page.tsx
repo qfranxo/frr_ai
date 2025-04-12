@@ -792,8 +792,18 @@ function CommunityContent() {
         
         // 캐시된 데이터에서 댓글 정보 추출하여 commentsLocalMap 초기화
         cachedData.forEach((post: GenerationPost) => {
-          if (post.id && post.comments && Array.isArray(post.comments)) {
-            commentsObj[post.id] = post.comments.map((comment: any) => normalizeComment(comment));
+          if (post.id) {
+            // 1. 먼저 캐시된 댓글이 있는지 확인
+            const cachedComments = loadCommentsFromCache(post.id);
+            if (cachedComments && cachedComments.length > 0) {
+              commentsObj[post.id] = cachedComments;
+            } else if (post.comments && Array.isArray(post.comments)) {
+              // 2. 게시물에 comments 배열이 있으면 사용
+              commentsObj[post.id] = post.comments.map((comment: any) => normalizeComment(comment));
+            } else {
+              // 3. 둘 다 없으면 빈 배열로 초기화
+              commentsObj[post.id] = [];
+            }
           }
         });
         
@@ -802,15 +812,13 @@ function CommunityContent() {
         setCommunityData(cachedData);
         setIsLoading(false);
         
-        // 캐시된 데이터를 사용한 후에도 백그라운드로 댓글 최신화
-        setTimeout(() => {
-          const postIds = cachedData.map((post: GenerationPost) => post.id);
-          preloadComments(postIds).then(freshComments => {
-            if (Object.keys(freshComments).length > 0) {
-              setCommentsLocalMap(prev => ({...prev, ...freshComments}));
-            }
-          });
-        }, 2000);
+        // 캐시된 데이터를 사용한 후에도 백그라운드로 댓글 최신화 - 하지만 즉시 실행
+        const postIds = cachedData.map((post: GenerationPost) => post.id);
+        preloadComments(postIds).then(freshComments => {
+          if (Object.keys(freshComments).length > 0) {
+            setCommentsLocalMap(prev => ({...prev, ...freshComments}));
+          }
+        });
         
         return;
       }
@@ -831,6 +839,30 @@ function CommunityContent() {
         
         // 게시물 ID 목록 추출
         const postIds = postsData.map((post: GenerationPost) => post.id);
+        
+        // 먼저 각 게시물에 대해 캐시된 댓글이 있는지 확인하고 적용
+        const initialCommentsMap: Record<string, Comment[]> = {};
+        postIds.forEach((postId: string) => {
+          const cachedComments = loadCommentsFromCache(postId);
+          if (cachedComments && cachedComments.length > 0) {
+            initialCommentsMap[postId] = cachedComments;
+          } else {
+            initialCommentsMap[postId] = [];
+          }
+        });
+        
+        // 캐시된 댓글로 초기 상태 설정 (즉시 UI에 반영)
+        if (Object.keys(initialCommentsMap).length > 0) {
+          setCommentsLocalMap(initialCommentsMap);
+          
+          // 캐시된 댓글로 게시물 업데이트
+          const postsWithCachedComments = postsData.map((post: GenerationPost) => ({
+            ...post,
+            comments: initialCommentsMap[post.id] || []
+          }));
+          
+          setCommunityData(postsWithCachedComments);
+        }
         
         // 3. 댓글 데이터 병렬 로드 (한 번에 모든 게시물의 댓글 요청)
         try {
@@ -909,7 +941,7 @@ function CommunityContent() {
           [postId]: cachedComments
         }));
         
-        // 원래 훅의 함수로 상태 업데이트 (로딩 없이 즉시 모달 표시)
+        // 로딩 없이 즉시 모달 표시
         if (openCommentModal) {
           openCommentModal(postId);
         }
@@ -919,7 +951,7 @@ function CommunityContent() {
         return;
       }
       
-      // 캐시에도 없고 로컬 상태에도 없는 경우 - 로딩 표시 후 데이터 가져오기
+      // 캐시에도 없고 로컬 상태에도 없는 경우 - 스켈레톤 UI 표시하면서 데이터 가져오기
       setIsCommentLoading(true);
       
       // 댓글 데이터 로드
@@ -944,22 +976,17 @@ function CommunityContent() {
             
             // 캐시 업데이트
             saveCommentsToCache(postId, normalizedComments);
-            
-            // 원래 훅의 함수로 상태 업데이트
-            if (openCommentModal) {
-              openCommentModal(postId);
-            }
           } else {
             // 댓글이 없거나 오류가 발생한 경우 빈 배열로 설정
             setCommentsLocalMap(prev => ({
               ...prev,
               [postId]: []
             }));
-            
-            // 원래 훅의 함수로 상태 업데이트
-            if (openCommentModal) {
-              openCommentModal(postId);
-            }
+          }
+          
+          // 원래 훅의 함수로 상태 업데이트
+          if (openCommentModal) {
+            openCommentModal(postId);
           }
           
           setIsCommentLoading(false);
@@ -980,11 +1007,14 @@ function CommunityContent() {
           
           setIsCommentLoading(false);
         });
-    }
-    
-    // 원래 훅의 함수로 상태 업데이트 (모달은 즉시 표시)
-    if (openCommentModal) {
-      openCommentModal(postId);
+    } else {
+      // 이미 댓글이 로드되어 있는 경우 - 즉시 모달 표시
+      if (openCommentModal) {
+        openCommentModal(postId);
+      }
+      
+      // 백그라운드에서 최신 데이터 가져오기
+      fetchCommentsInBackground(postId);
     }
   };
 
