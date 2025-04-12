@@ -21,14 +21,29 @@ import LoadingScreen from '@/components/shared/LoadingScreen';
 
 // 댓글 타입 정의
 interface Comment {
-  id: string;
-  imageId: string;
-  userId: string;
-  userName: string;
+  id: string | number;
   text: string;
-  content?: string; // DB에는 content로 저장됨
+  content?: string;
+  author: string;
   createdAt: string;
+  imageId?: string;
+  userId?: string;
+  userName?: string;
 }
+
+// 댓글 데이터를 정규화하는 유틸리티 함수 추가
+const normalizeComment = (comment: any): Comment => {
+  return {
+    id: comment.id,
+    text: comment.text || comment.content || '',
+    content: comment.content || comment.text || '',
+    author: comment.author || comment.userName || '사용자',
+    createdAt: comment.createdAt || comment.created_at || new Date().toISOString(),
+    imageId: comment.imageId,
+    userId: comment.userId || comment.user_id,
+    userName: comment.userName || comment.author
+  };
+};
 
 // 실제 DB에서 가져온 데이터 타입 정의
 interface GenerationPost {
@@ -391,6 +406,9 @@ const CategoryButton = ({ id, label, isSelected, onClick }: CategoryButtonProps)
   );
 };
 
+// 상수 정의 추가 (파일 초반부)
+const ITEMS_PER_PAGE = 12; // 한 페이지에 표시할 항목 수
+
 // 메인 기능을 담당하는 컴포넌트를 분리
 function CommunityContent() {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -405,8 +423,42 @@ function CommunityContent() {
   // 페이지 URL 파라미터 가져오기 - 훅을 컴포넌트 최상위 레벨로 이동
   const searchParams = useSearchParams();
   
-  // Clerk에서 사용자 정보 가져오기
-  const { user, isSignedIn } = useUser();
+  // useUser 훅 사용 부분 수정 - 로딩 상태 활용 추가
+  const { user, isSignedIn, isLoaded } = useUser();
+  
+  // 현재 사용자 정보 부분을 수정하여 더 안전하게 처리
+  useEffect(() => {
+    // 사용자 데이터 로딩 상태 확인
+    if (isLoaded) {
+      console.log("Clerk 사용자 정보 로딩 완료:", {
+        isSignedIn,
+        userId: user?.id,
+        userName: user?.firstName || user?.username,
+        userImage: user?.imageUrl
+      });
+    }
+  }, [user, isSignedIn, isLoaded]);
+  
+  // 현재 사용자 정보 객체 생성 부분 수정
+  const currentUser = useMemo(() => {
+    // 사용자 정보가 로드되지 않았거나 로그인하지 않은 경우
+    if (!isLoaded || !isSignedIn || !user) {
+      return {
+        id: 'guest-user',
+        name: '게스트',
+        username: 'guest',
+        imageUrl: undefined
+      };
+    }
+    
+    // 실제 사용자 정보 반환
+    return {
+      id: user.id,
+      name: user.firstName || user.username || '사용자',
+      username: user.username || 'user',
+      imageUrl: user.imageUrl
+    };
+  }, [user, isSignedIn, isLoaded]);
   
   // 검색 파라미터 변경 핸들러
   const handleSearchParamsChange = useCallback((searchParams: URLSearchParams) => {
@@ -416,13 +468,20 @@ function CommunityContent() {
     }
   }, []);
   
-  // 현재 사용자 정보
-  const currentUser = {
-    id: user?.id || 'guest-user',
-    name: user?.firstName || user?.username || '게스트',
-    username: user?.username || 'guest',
-    imageUrl: user?.imageUrl
-  };
+  // isLoaded 상태가 변경될 때마다 데이터 다시 로드
+  useEffect(() => {
+    // 처음 마운트되거나 isLoaded 상태가 변경됐을 때 데이터 로드
+    if (isLoaded) {
+      fetchData();
+    }
+  }, [isLoaded, searchParams]); // searchParams 변경 시에도 다시 로드
+  
+  // URL 파라미터가 변경될 때 카테고리 업데이트
+  useEffect(() => {
+    if (searchParams) {
+      handleSearchParamsChange(searchParams);
+    }
+  }, [searchParams, handleSearchParamsChange]);
   
   // 댓글 모달 상태 관리 추가
   const [commentModalState, setCommentModalState] = useState({ postId: '', text: '' });
@@ -430,35 +489,32 @@ function CommunityContent() {
   // 좋아요 및 댓글 상태 관리를 위한 직접 상태 선언
   const [likesMap, setLikesMap] = useState<Record<string, number>>({});
   const [likedPostsMap, setLikedPostsMap] = useState<Record<string, boolean>>({});
-  const [commentsMap, setCommentsMap] = useState<Record<string, any[]>>({});
+  const [commentsLocalMap, setCommentsLocalMap] = useState<Record<string, Comment[]>>({});
   
   // 기존 좋아요 및 댓글 기능 훅 사용 (데이터 초기화용)
-  const { 
-    commentsMap: hookCommentsMap, 
-    handleComment: addComment, 
-    deleteComment: removeComment,
-    isCommentModalOpen: hookIsCommentModalOpen, 
-    openCommentModal, 
+  const {
+    commentsMap,
+    handleComment,
+    deleteComment,
+    isCommentModalOpen,
+    openCommentModal,
     closeCommentModal,
     commentText,
     handleCommentTextChange,
     submitComment,
-    selectedPostId: hookSelectedPostId
-  } = useComments(communityData as any, currentUser);
-
+    selectedPostId: hookSelectedPostId,
+    refreshComments
+  } = useComments(communityData as any, currentUser, 'community'); // 명시적으로 'community' 페이지 타입 전달
+    
   // 커스텀 상태 변수 추가
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
-
+  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  
   // 상태 초기화 효과
-  useEffect(() => {
-    setCommentsMap(hookCommentsMap || {});
-  }, [hookCommentsMap]);
-  
-  useEffect(() => {
-    setIsCommentModalOpen(hookIsCommentModalOpen);
-  }, [hookIsCommentModalOpen]);
-  
   useEffect(() => {
     if (hookSelectedPostId) {
       setSelectedPostId(hookSelectedPostId);
@@ -595,97 +651,152 @@ function CommunityContent() {
     }
   };
 
+  // 최초 로드를 위한 스토리지 API 접근 함수
+  const preloadComments = async (postIds: string[]) => {
+    if (!postIds.length) return {};
+    
+    try {
+      // 모든 postId에 대한 댓글을 병렬로 가져옴
+      const commentsPromises = postIds.map(id => 
+        communityApi.loadCommentsForImage(id)
+          .catch(() => ({ success: false, data: [] }))
+      );
+      
+      // 병렬로 모든 요청 처리
+      const results = await Promise.all(commentsPromises);
+      
+      // 결과를 postId별로 매핑
+      const commentsMap: Record<string, Comment[]> = {};
+      
+      results.forEach((result, index) => {
+        const postId = postIds[index];
+        
+        if (result.success && Array.isArray(result.data)) {
+          // 모든 댓글에 대해 normalizeComment 적용
+          commentsMap[postId] = result.data.map((comment: any) => normalizeComment(comment))
+            .sort((a, b) => {
+              try {
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              } catch {
+                return 0;
+              }
+            });
+        } else {
+          commentsMap[postId] = [];
+        }
+      });
+      
+      return commentsMap;
+    } catch (error) {
+      console.error("댓글 미리 로드 중 오류:", error);
+      return {};
+    }
+  };
+
   // 호출 가능한 데이터 로드 함수 직접 정의
   const fetchData = async () => {
     try {
+      // 사용자 정보 로딩 상태 확인
+      if (!isLoaded) {
+        // 로딩 중이면 약간 대기 후 재시도
+        setTimeout(fetchData, 500);
+        return;
+      }
+
       // URL 파라미터에서 refresh 확인 - 컴포넌트 레벨에서 선언된 searchParams 사용
       const shouldRefresh = searchParams?.get('refresh') === 'true';
       
       // 캐시된 데이터 확인 (refresh가 true면 캐시 무시)
       const cachedData = loadCommunityDataFromCache();
       if (cachedData && !shouldRefresh) {
-        console.log('캐시된 커뮤니티 데이터 사용');
+        // 캐싱된 데이터 사용 시 commentsLocalMap도 함께 초기화
+        const commentsObj: Record<string, Comment[]> = {};
+        
+        // 캐시된 데이터에서 댓글 정보 추출하여 commentsLocalMap 초기화
+        cachedData.forEach((post: GenerationPost) => {
+          if (post.id && post.comments && Array.isArray(post.comments)) {
+            commentsObj[post.id] = post.comments.map((comment: any) => normalizeComment(comment));
+          }
+        });
+        
+        // 상태 업데이트
+        setCommentsLocalMap(commentsObj);
         setCommunityData(cachedData);
         setIsLoading(false);
+        
+        // 캐시된 데이터를 사용한 후에도 백그라운드로 댓글 최신화
+        setTimeout(() => {
+          const postIds = cachedData.map((post: GenerationPost) => post.id);
+          preloadComments(postIds).then(freshComments => {
+            if (Object.keys(freshComments).length > 0) {
+              setCommentsLocalMap(prev => ({...prev, ...freshComments}));
+            }
+          });
+        }, 2000);
+        
         return;
       }
 
       setIsLoading(true);
       
-      // 1. 게시물 데이터 가져오기
-      const result = await communityApi.loadCommunityData(true);
+      // 1. 게시물 데이터 가져오기 (병렬 처리 최적화)
+      const postsDataPromise = communityApi.loadCommunityData(true);
+      
+      // 2. 게시물 데이터 처리
+      const result = await postsDataPromise;
       
       if (result.success) {
         const postsData = result.data || [];
         
-        // 2. 각 게시물의 댓글 데이터를 로드
-        const postsWithComments = [...postsData];
+        // 먼저 게시물 데이터를 표시하여 사용자 경험 개선
+        setCommunityData(postsData);
         
-        // 댓글 데이터 초기화를 위한 임시 맵
-        const commentsData: Record<string, any[]> = {};
+        // 게시물 ID 목록 추출
+        const postIds = postsData.map((post: GenerationPost) => post.id);
         
-        // 댓글 데이터 로드를 병렬로 처리 - 배치 방식 사용
+        // 3. 댓글 데이터 병렬 로드 (한 번에 모든 게시물의 댓글 요청)
         try {
-          // 배치 크기 설정 (너무 많은 요청을 동시에 보내지 않도록)
-          const batchSize = 10; // 더 큰 배치 사이즈로 변경하여 API 호출 횟수 감소
-          const postBatches = [];
+          const commentsData = await preloadComments(postIds);
           
-          // 배치로 나누기
-          for (let i = 0; i < postsWithComments.length; i += batchSize) {
-            postBatches.push(postsWithComments.slice(i, i + batchSize));
-          }
+          // 4. 댓글 데이터로 게시물 업데이트
+          const postsWithComments = postsData.map((post: GenerationPost) => {
+            return {
+              ...post,
+              comments: commentsData[post.id] || []
+            };
+          });
           
-          // 각 배치별로 순차적으로 처리
-          for (const batch of postBatches) {
-            const commentPromises = batch.map(post => 
-              communityApi.loadCommentsForImage(post.id)
-                .then(response => {
-                  if (response.success && response.data) {
-                    // 댓글 정렬 - 최신순 (createdAt 기준 내림차순)
-                    const sortedComments = [...response.data].sort((a, b) => {
-                      const dateA = new Date(a.createdAt || 0);
-                      const dateB = new Date(b.createdAt || 0);
-                      return dateB.getTime() - dateA.getTime();
-                    });
-                    
-                    // 댓글 데이터를 게시물에 추가
-                    post.comments = sortedComments;
-                    // 별도의 상태 관리용 맵에도 저장
-                    commentsData[post.id] = sortedComments;
-                    return post;
-                  }
-                  return post;
-                })
-                .catch(() => {
-                  // 에러 발생 시 빈 배열로 초기화
-                  post.comments = post.comments || [];
-                  return post;
-                })
-            );
-            
-            // 현재 배치의 모든 요청이 완료될 때까지 기다림
-            await Promise.all(commentPromises);
-          }
-          
-          // 댓글 맵 상태 업데이트
-          setCommentsMap(commentsData);
-          
-          // 게시물 데이터 캐싱
+          // 5. 상태 업데이트
+          setCommentsLocalMap(commentsData);
           saveCommunityDataToCache(postsWithComments);
-          
-          // 게시물 데이터 업데이트
           setCommunityData(postsWithComments);
         } catch (commentError) {
-          // 에러 시 게시물 데이터만 업데이트
-          saveCommunityDataToCache(postsData); // 댓글 없는 데이터라도 캐싱
-          setCommunityData(postsData);
+          // 댓글 로드 실패 시 빈 댓글 배열로 설정
+          const emptyCommentsMap: Record<string, Comment[]> = {};
+          postIds.forEach((id: string) => {
+            emptyCommentsMap[id] = [];
+          });
+          
+          setCommentsLocalMap(emptyCommentsMap);
+          
+          // 게시물 데이터는 이미 설정됨 (댓글만 빈 배열)
+          const postsWithEmptyComments = postsData.map((post: GenerationPost) => ({
+            ...post,
+            comments: []
+          }));
+          
+          saveCommunityDataToCache(postsWithEmptyComments);
         }
       } else {
         throw new Error(result.error || "커뮤니티 데이터를 가져오는데 실패했습니다.");
       }
     } catch (err) {
-      // 에러 메시지만 표시, 로그 제거
+      // 에러 메시지 설정
       setError(err instanceof Error ? err.message : String(err));
+      
+      // 에러 발생 시에도 빈 데이터로 초기화
+      setCommunityData([]);
+      setCommentsLocalMap({});
     } finally {
       setIsLoading(false);
     }
@@ -705,19 +816,17 @@ function CommunityContent() {
   // 댓글 모달 열기/닫기 함수 직접 구현
   const openCommentModalCustom = (postId: string) => {
     setSelectedPostId(postId);
-    setIsCommentModalOpen(true);
     
-    // 원래 훅의 함수도 호출하여 상태 동기화
+    // 원래 훅의 함수로 상태 업데이트
     if (openCommentModal) {
       openCommentModal(postId);
     }
   };
-  
+
   const closeCommentModalCustom = () => {
-    setIsCommentModalOpen(false);
     setSelectedPostId(null);
     
-    // 원래 훅의 함수도 호출하여 상태 동기화
+    // 원래 훅의 함수로 상태 업데이트
     if (closeCommentModal) {
       closeCommentModal();
     }
@@ -740,29 +849,30 @@ function CommunityContent() {
       // 선택된 포스트 찾기
       const post = communityData.find(p => String(p.id) === postId);
       if (!post) {
-        console.error('[댓글 추가] 게시물을 찾을 수 없음:', postId);
         return;
       }
       
-      console.log(`[댓글 추가] 시작: postId=${postId}, 댓글 길이=${text.length}`);
-      
       // 임시 댓글 ID 생성 (로컬에서만 사용)
       const tempId = `temp-${Date.now()}`;
-      const tempComment = {
+      const tempComment: Comment = {
         id: tempId,
         imageId: postId,
         userId: currentUser.id,
         userName: currentUser.name || currentUser.username || '사용자',
-        text: text,
-        content: text,
+        text: text || '',
+        content: text || '',
+        author: currentUser.name || currentUser.username || '사용자', // author 필드 추가
         createdAt: new Date().toISOString()
       };
       
       // 낙관적 UI 업데이트
-      setCommentsMap(prev => ({
-        ...prev,
-        [postId]: [tempComment, ...(prev[postId] || [])]
-      }));
+      setCommentsLocalMap((prev: Record<string, Comment[]>) => {
+        const updatedComments = prev[postId] ? [...prev[postId]] : [];
+        return {
+          ...prev,
+          [postId]: [normalizeComment(tempComment), ...updatedComments]
+        };
+      });
       
       // 선택한 게시물의 댓글 배열에도 임시 댓글 추가
       const currentComments = post.comments || [];
@@ -780,7 +890,6 @@ function CommunityContent() {
       }
       
       // API 호출로 댓글 저장
-      console.log(`[댓글 API 호출] POST /api/comments 시작`);
       const response = await fetch('/api/comments', {
         method: 'POST',
         headers: {
@@ -794,30 +903,33 @@ function CommunityContent() {
         })
       });
       
-      console.log(`[댓글 API 응답] 상태 코드: ${response.status}`);
       const data = await response.json();
-      console.log(`[댓글 API 응답] 데이터:`, data);
       
       if (response.ok && data.success) {
         // 서버에서 반환된 실제 댓글 ID로 낙관적 업데이트했던 임시 ID 교체
-        console.log(`[댓글 API 응답] 데이터 확인:`, data.data);
         
         // 서버 응답에서 배열인지 확인하고 첫 번째 항목 추출
         const commentData = Array.isArray(data.data) && data.data.length > 0 
           ? data.data[0] 
           : data.data;
         
-        console.log(`[댓글 추가 성공] 임시 ID를 실제 ID로 교체: ${tempId} -> ${commentData.id}`);
-        
         // commentsMap 업데이트
-        setCommentsMap(prev => ({
-          ...prev,
-          [postId]: prev[postId].map(c => 
-            c.id === tempId 
-              ? { ...c, id: commentData.id, createdAt: commentData.createdAt } 
-              : c
-          )
-        }));
+        setCommentsLocalMap((prev: Record<string, Comment[]>) => {
+          if (!prev[postId]) return prev;
+          
+          return {
+            ...prev,
+            [postId]: prev[postId].map((c: Comment) => 
+              c.id === tempId 
+                ? normalizeComment({
+                    ...c,
+                    id: commentData.id,
+                    createdAt: commentData.createdAt
+                  })
+                : c
+            )
+          };
+        });
         
         // 게시물의 comments 배열 업데이트
         const updatedComments = (post.comments || []).map(c => {
@@ -840,13 +952,15 @@ function CommunityContent() {
         });
       } else {
         // 서버 응답이 실패인 경우
-        console.error('[댓글 추가 실패]', data.error || '알 수 없는 오류');
         
         // 낙관적 업데이트 롤백
-        setCommentsMap(prev => ({
-          ...prev,
-          [postId]: prev[postId].filter(c => c.id !== tempId)
-        }));
+        setCommentsLocalMap((prev: Record<string, Comment[]>) => {
+          const updatedComments = prev[postId] ? [...prev[postId]] : [];
+          return {
+            ...prev,
+            [postId]: updatedComments.filter((c: Comment) => c.id !== tempId)
+          };
+        });
         
         // 게시물 댓글 배열에서도 제거
         post.comments = (post.comments || []).filter(c => c.id !== tempId);
@@ -862,7 +976,6 @@ function CommunityContent() {
         commentScrollRef.current.scrollTop = 0;
       }
     } catch (error) {
-      console.error('[댓글 추가 오류]', error);
       toast.error('Error posting comment', {
         position: 'top-center',
       });
@@ -876,24 +989,19 @@ function CommunityContent() {
     let originalPostComments: Comment[] = [];
     
     try {
-      console.log(`[댓글 삭제] 시작: postId=${postId}, commentId=${commentId}`);
-      
       // 원본 데이터 백업 (삭제 실패 시 복구용)
       originalCommentsMapData = commentsMap[postId] ? JSON.parse(JSON.stringify(commentsMap[postId])) : [];
       const originalPostData = communityData.find(p => p.id === postId);
       originalPostComments = originalPostData?.comments ? JSON.parse(JSON.stringify(originalPostData.comments)) : [];
       
-      console.log(`[댓글 삭제] 데이터 백업 완료: 댓글 ${originalCommentsMapData.length}개`);
-      
       // 낙관적 UI 업데이트 - prev[postId]가 존재하는지 체크 추가
-      setCommentsMap(prev => {
+      setCommentsLocalMap((prev: Record<string, Comment[]>) => {
         if (!prev[postId]) {
-          console.log(`[댓글 삭제] 주의: commentsMap에 postId=${postId}에 대한 데이터가 없음`);
           return prev;
         }
         return {
           ...prev,
-          [postId]: prev[postId].filter(c => c.id !== commentId)
+          [postId]: prev[postId].filter((c: Comment) => c.id !== commentId)
         };
       });
       
@@ -927,7 +1035,6 @@ function CommunityContent() {
       
       while (retryCount <= maxRetries) {
         try {
-          console.log(`[댓글 API 호출] DELETE /api/comments/${commentId} 시작 (시도: ${retryCount + 1}/${maxRetries + 1})`);
           response = await fetch(`/api/comments/${commentId}`, {
             method: 'DELETE',
             headers: {
@@ -935,16 +1042,11 @@ function CommunityContent() {
             }
           });
           
-          console.log(`[댓글 API 응답] 상태 코드: ${response.status}`);
-          
           // API 응답 데이터 파싱
           try {
             responseData = await response.json();
-            console.log(`[댓글 API 응답] 데이터:`, responseData);
             break; // 성공하면 재시도 루프 탈출
           } catch (parseError) {
-            console.error(`[댓글 API 응답] JSON 파싱 오류:`, parseError);
-            
             // 응답이 성공이면서 JSON이 없는 경우 (빈 응답)
             if (response.ok) {
               responseData = { success: true };
@@ -953,7 +1055,7 @@ function CommunityContent() {
             
             // 파싱 오류면서 마지막 시도였다면 예외 발생
             if (retryCount === maxRetries) {
-              throw new Error(`API 응답 파싱 오류: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+              throw new Error(`API 응답 파싱 오류`);
             }
           }
           
@@ -965,7 +1067,6 @@ function CommunityContent() {
           // 5xx 서버 오류인 경우만 재시도 (4xx는 재시도해도 의미 없음)
           if (response.status >= 500 && retryCount < maxRetries) {
             retryCount++;
-            console.log(`[댓글 API 호출] 서버 오류로 재시도 (${retryCount}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기 후 재시도
             continue;
           }
@@ -976,7 +1077,6 @@ function CommunityContent() {
           // 네트워크 오류 등이 발생했고 재시도 횟수가 남아있으면 재시도
           if (retryCount < maxRetries) {
             retryCount++;
-            console.log(`[댓글 API 호출] 네트워크 오류로 재시도 (${retryCount}/${maxRetries}):`, fetchError);
             await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기 후 재시도
           } else {
             // 모든 재시도 실패 시 예외 발생
@@ -987,25 +1087,19 @@ function CommunityContent() {
       
       // 최종 응답 확인
       if (response && response.ok) {
-        console.log(`[댓글 삭제 성공] commentId=${commentId}`);
         toast.success('Comment deleted successfully');
       } else {
-        console.error(`[댓글 삭제 실패] API 응답 오류:`, responseData);
         throw new Error(responseData?.error || `API 호출 실패 (상태 코드: ${response?.status || 'unknown'})`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[댓글 삭제 오류]', errorMessage, error);
       toast.error('Failed to delete comment');
       
       // 삭제 실패 시 원래대로 복구
-      console.log('[댓글 삭제 실패] 데이터 복구 시작');
-      
       try {
         // 백업 데이터가 있으면 로컬 상태 복구 시도
         if (originalCommentsMapData.length > 0) {
-          console.log('[댓글 삭제 실패] commentsMap 복구 시도');
-          setCommentsMap(prev => ({
+          setCommentsLocalMap((prev: Record<string, Comment[]>) => ({
             ...prev,
             [postId]: originalCommentsMapData
           }));
@@ -1022,21 +1116,15 @@ function CommunityContent() {
               return post;
             })
           );
-          
-          console.log('[댓글 삭제 실패] 로컬 데이터 복구 완료');
         } else {
           // 백업 데이터가 없거나 불완전하면 서버에서 다시 가져오기
-          console.log('[댓글 삭제 실패] 백업 데이터 불충분, 서버에서 다시 로드');
           await fetchData();
         }
       } catch (recoveryError) {
-        console.error('[댓글 삭제 복구 실패]', recoveryError);
         // 복구 실패 시 최후의 수단으로 전체 데이터 다시 로드
         try {
-          console.log('[댓글 삭제 복구 실패] 전체 데이터 다시 로드 시도');
           await fetchData();
         } catch (finalError) {
-          console.error('[댓글 삭제 복구 최종 실패]', finalError);
           toast.error('Error recovering data. Please refresh the page.');
         }
       }
@@ -1126,47 +1214,26 @@ function CommunityContent() {
   };
   
   // 컴포넌트 상태에서 해당 postId의 댓글 목록 획득
-  const getPostComments = (postId: string | undefined, defaultComments: Comment[] = []) => {
-    try {
-      if (!postId) return defaultComments;
-      
-      // 1. 게시물 객체에서 직접 comments 속성을 먼저 확인
-      const post = communityData.find(p => p.id === postId);
-      
-      if (post?.comments && Array.isArray(post.comments)) {
-        // 댓글 데이터 유효성 확인 및 content/text 필드 호환성 처리
-        return post.comments.map(comment => {
-          const result = { ...comment };
-          // content와 text 필드 간 호환성 처리
-          if (result.content && !result.text) {
-            result.text = result.content;
-          } else if (result.text && !result.content) {
-            result.content = result.text;
-          }
-          return result;
-        });
-      }
-      
-      // 2. 그 다음 commentsMap에서 확인
-      if (commentsMap && commentsMap[postId] && Array.isArray(commentsMap[postId])) {
-        return commentsMap[postId].map(comment => {
-          const result = { ...comment };
-          // content와 text 필드 간 호환성 처리
-          if (result.content && !result.text) {
-            result.text = result.content;
-          } else if (result.text && !result.content) {
-            result.content = result.text;
-          }
-          return result;
-        });
-      }
-      
-      // 3. 해당되는 댓글이 없으면 빈 배열 반환
-      return defaultComments;
-    } catch (error) {
-      console.error('[getPostComments] 댓글 정보 가져오기 오류:', error);
-      return defaultComments;
-    }
+  const getPostComments = (postId: string | undefined, defaultComments: any[] = []): Comment[] => {
+    if (!postId) return defaultComments.map(comment => normalizeComment(comment) as Comment);
+
+    const comments = commentsLocalMap[postId] || defaultComments;
+    
+    // 모든 댓글에 author 필드가 있는지 확인하고 없으면 추가
+    return comments.map(comment => {
+      // 필수 필드가 있는지 확인하고 없으면 추가
+      const normalizedComment: Comment = {
+        id: comment.id,
+        text: comment.text || comment.content || '',
+        content: comment.content || comment.text || '',
+        author: comment.author || comment.userName || '사용자',
+        createdAt: comment.createdAt || new Date().toISOString(),
+        imageId: comment.imageId || postId,
+        userId: comment.userId || '', // userId 속성만 사용 (user_id 제거)
+        userName: comment.userName || comment.author || ''
+      };
+      return normalizedComment;
+    });
   };
   
   // 다운로드 핸들러 추가
@@ -1518,16 +1585,6 @@ function CommunityContent() {
     return () => {};
   }, [filteredData]);
 
-  // useEffect 내부에서 URL 파라미터 처리
-  useEffect(() => {
-    if (searchParams) {
-      const categoryFromUrl = searchParams.get('category');
-      if (categoryFromUrl) {
-        setSelectedCategory(categoryFromUrl);
-      }
-    }
-  }, [searchParams]);
-
   return (
     <div className="container mx-auto py-5 px-0 min-h-screen">
       {/* 배경 효과 */}
@@ -1611,32 +1668,36 @@ function CommunityContent() {
                 className="flex w-full ml-0"
                 columnClassName="pl-0 pr-1 sm:pl-1 sm:pr-2 md:pl-2 md:pr-3 bg-clip-padding"
               >
-                {filteredPosts.map((post) => (
-                  <div className="break-inside-avoid mb-6 sm:mb-8 md:mb-10" key={post.id}>
-                    <ImageCard
-                      post={{
-                        ...post,
-                        // post 객체 내부에 카테고리 정보 설정
-                        category: post.category || getCategoryFromStyle(typeof post.renderingStyle === 'string' 
-                          ? post.renderingStyle 
-                          : (post.renderingStyle as { id?: string })?.id || '', post.prompt)
-                      }}
-                      variant="community"
-                      layout="masonry"
-                      isSignedIn={!!isSignedIn}
-                      currentUser={currentUser}
-                      onLike={handlePostLike}
-                      onComment={handlePostComment}
-                      onDeleteComment={handleDeleteComment}
-                      onShare={handleShare}
-                      onDownload={handleDownload}
-                      onDeletePost={post.userId === currentUser.id ? handleDeletePost : undefined}
-                      isLiked={isPostLiked(String(post.id))}
-                      likesCount={getPostLikes(String(post.id), post.likes || 0)}
-                      comments={getPostComments(String(post.id), post.comments || []) as any}
-                    />
-                  </div>
-                ))}
+                {filteredPosts.map((post: GenerationPost, idx) => {
+                  // 게시물별 댓글 확인 (필터링된 post 객체에 대해서만 수행)
+                  const commentsData = getPostComments(String(post.id), []);
+                  
+                  // author 필드가 없는 경우 userName을 복사하여 author 필드 추가
+                  const comments = commentsData.map(comment => ({
+                    ...comment,
+                    author: comment.author || comment.userName
+                  }));
+                  
+                  return (
+                    <div key={`post-${post.id}-${idx}`} className="relative overflow-hidden group">
+                      <ImageCard
+                        variant="community"
+                        post={post}
+                        isSignedIn={!!isSignedIn}
+                        currentUser={currentUser}
+                        onLike={() => handlePostLike(String(post.id))}
+                        onComment={(postId, text) => handlePostComment(String(postId), text)}
+                        onDeleteComment={(postId, commentId) => handleDeleteComment(String(postId), String(commentId))}
+                        onDeletePost={() => post.userId === currentUser.id ? handleDeletePost(String(post.id)) : undefined}
+                        onShare={() => handleShare(String(post.id))}
+                        onDownload={() => handleDownload(post)}
+                        isLiked={isPostLiked(String(post.id))}
+                        likesCount={getPostLikes(String(post.id), post.likes || 0)}
+                        comments={comments as Comment[]}
+                      />
+                    </div>
+                  );
+                })}
               </Masonry>
             )}
           </div>
@@ -1723,7 +1784,6 @@ function CommunityContent() {
                       
                       return timeB - timeA;
                     } catch (error) {
-                      console.error('댓글 정렬 오류:', error);
                       return 0;
                     }
                   })

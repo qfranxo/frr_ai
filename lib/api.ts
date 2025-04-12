@@ -76,39 +76,69 @@ export async function apiRequest<T = any>(
         ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}retry=${retries}&t=${Date.now()}` 
         : endpoint;
 
-      // 타임아웃 설정 추가 (AbortController 사용)
-      const timeoutSeconds = 10;
+      // AbortController 생성 및 타임아웃 설정 (더 안전한 방식으로 구현)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
       requestOptions.signal = controller.signal;
-
-      const response = await fetch(urlWithRetry, requestOptions);
-      clearTimeout(timeoutId); // 타임아웃 제거
       
-      if (!response.ok) {
-        // HTTP 오류 상태 코드 처리
-        console.error(`HTTP Error: ${response.status} ${response.statusText} from ${endpoint}`);
-        
-        // 응답 형식을 JSON으로 가정하지 말고 텍스트로 먼저 확인
+      // 타임아웃 설정
+      const timeoutSeconds = 10;
+      let timeoutHandler: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
         try {
-          const errorText = await response.text();
+          // 명시적인 reason 메시지 제공
+          controller.abort('Request timed out after ' + timeoutSeconds + ' seconds');
+        } catch (e) {
+          console.error('Error aborting request:', e);
+        }
+      }, timeoutSeconds * 1000);
+
+      try {
+        const response = await fetch(urlWithRetry, requestOptions);
+        
+        // 요청 완료 후 타임아웃 핸들러 정리
+        if (timeoutHandler) {
+          clearTimeout(timeoutHandler);
+          timeoutHandler = undefined;
+        }
+
+        // 응답이 OK가 아닌 경우
+        if (!response.ok) {
+          // HTTP 오류 상태 코드 처리
+          console.error(`HTTP Error: ${response.status} ${response.statusText} from ${endpoint}`);
           
-          // JSON으로 파싱 시도
+          // 응답 형식을 JSON으로 가정하지 말고 텍스트로 먼저 확인
           try {
-            const errorJson = JSON.parse(errorText);
-            if (showErrorToast) {
-              toast.error(errorJson.error || `Error: ${response.status}`, {
-                position: 'top-center',
-                duration: 3000,
-              });
+            const errorText = await response.text();
+            
+            // JSON으로 파싱 시도
+            try {
+              const errorJson = JSON.parse(errorText);
+              if (showErrorToast) {
+                toast.error(errorJson.error || `Error: ${response.status}`, {
+                  position: 'top-center',
+                  duration: 3000,
+                });
+              }
+              return { 
+                success: false, 
+                error: errorJson.error || `Server error: ${response.status}`,
+                source: 'http-error' 
+              };
+            } catch (parseError) {
+              // JSON 파싱 실패 - 텍스트 응답 반환
+              if (showErrorToast) {
+                toast.error(`Error: ${response.status}`, {
+                  position: 'top-center',
+                  duration: 3000,
+                });
+              }
+              return { 
+                success: false, 
+                error: errorText || `Server error: ${response.status}`,
+                source: 'http-error-text' 
+              };
             }
-            return { 
-              success: false, 
-              error: errorJson.error || `Server error: ${response.status}`,
-              source: 'http-error' 
-            };
-          } catch (parseError) {
-            // JSON 파싱 실패 - 텍스트 응답 반환
+          } catch (textError) {
+            // 텍스트 읽기 실패
             if (showErrorToast) {
               toast.error(`Error: ${response.status}`, {
                 position: 'top-center',
@@ -117,105 +147,102 @@ export async function apiRequest<T = any>(
             }
             return { 
               success: false, 
-              error: errorText || `Server error: ${response.status}`,
-              source: 'http-error-text' 
+              error: `Server error: ${response.status}`,
+              source: 'http-error-unknown' 
             };
           }
-        } catch (textError) {
-          // 텍스트 읽기 실패
+        }
+        
+        // 성공 응답
+        try {
+          const result = await response.json();
+
+          if (!result.success && showErrorToast) {
+            toast.error(result.error || 'An error occurred', {
+              position: 'top-center',
+              duration: 3000,
+            });
+          }
+
+          if (result.success && showSuccessToast) {
+            toast.success(result.message || 'Operation successful', {
+              position: 'top-center',
+              duration: 3000,
+            });
+          }
+
+          return result;
+        } catch (parseError) {
+          console.error(`JSON parsing error for ${endpoint}:`, parseError);
+          
           if (showErrorToast) {
-            toast.error(`Error: ${response.status}`, {
+            toast.error('Invalid response format', {
+              position: 'top-center',
+              duration: 3000,
+            });
+          }
+          
+          return { 
+            success: false, 
+            error: 'Invalid response format',
+            source: 'json-parse-error' 
+          };
+        }
+      } catch (fetchError) {
+        // fetch 요청 실패 시 타임아웃 핸들러 정리
+        if (timeoutHandler) {
+          clearTimeout(timeoutHandler);
+          timeoutHandler = undefined;
+        }
+        
+        // 에러 처리
+        lastError = fetchError;
+        console.error(`Network error for ${endpoint} (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, fetchError);
+        
+        // AbortError는 타임아웃이나 사용자에 의한 중단으로 발생
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          if (showErrorToast) {
+            toast.error('Request timed out, please try again', {
               position: 'top-center',
               duration: 3000,
             });
           }
           return { 
             success: false, 
-            error: `Server error: ${response.status}`,
-            source: 'http-error-unknown' 
+            error: 'Request timed out',
+            source: 'timeout-error' 
           };
         }
-      }
-      
-      // 성공 응답
-      try {
-        const result = await response.json();
-
-        if (!result.success && showErrorToast) {
-          toast.error(result.error || 'An error occurred', {
-            position: 'top-center',
-            duration: 3000,
-          });
-        }
-
-        if (result.success && showSuccessToast) {
-          toast.success(result.message || 'Operation successful', {
-            position: 'top-center',
-            duration: 3000,
-          });
-        }
-
-        return result;
-      } catch (parseError) {
-        console.error(`JSON parsing error for ${endpoint}:`, parseError);
         
+        // 모든 재시도 실패 또는 재시도 불가능한 오류
         if (showErrorToast) {
-          toast.error('Invalid response format', {
+          toast.error('Network or server error, please check your connection', {
             position: 'top-center',
             duration: 3000,
           });
         }
         
+        // 마지막 에러 반환
         return { 
           success: false, 
-          error: 'Invalid response format',
-          source: 'json-parse-error' 
+          error: lastError instanceof Error ? lastError.message : 'Network or server error',
+          source: 'network-error' 
         };
       }
     } catch (error) {
+      // 예상치 못한 오류 발생 시
       lastError = error;
-      console.error(`Network error for ${endpoint} (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
+      console.error(`Unexpected error for ${endpoint} (attempt ${retries + 1}/${MAX_RETRIES + 1}):`, error);
       
-      // 에러 타입에 따른 처리
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        // 네트워크 연결 문제, 재시도 가능
-        retries++;
-        if (retries <= MAX_RETRIES) {
-          // 지수 백오프: 각 재시도마다 대기 시간 증가
-          const waitTime = Math.min(1000 * (2 ** retries), 5000);
-          console.log(`Retrying in ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue; // 재시도
-        }
-      } else if (error instanceof Error && error.name === 'AbortError') {
-        // 타임아웃 오류
-        if (showErrorToast) {
-          toast.error('Request timed out, please try again', {
-            position: 'top-center',
-            duration: 3000,
-          });
-        }
-        return { 
-          success: false, 
-          error: 'Request timed out',
-          source: 'timeout-error' 
-        };
+      // 실패 횟수 증가 후 재시도 가능한지 확인
+      retries++;
+      if (retries <= MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
       }
       
-      // 모든 재시도 실패 또는 재시도 불가능한 오류
-      if (showErrorToast) {
-        toast.error('Network or server error, please check your connection', {
-          position: 'top-center',
-          duration: 3000,
-        });
-      }
-      
-      // 마지막 에러 반환
-      return { 
-        success: false, 
-        error: lastError instanceof Error ? lastError.message : 'Network or server error',
-        source: 'network-error' 
-      };
+      // 더 이상 재시도 불가능
+      break;
     }
   }
   

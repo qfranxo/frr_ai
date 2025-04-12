@@ -63,19 +63,11 @@ import {
     createdAt: timestamp('created_at').defaultNow(),
   });
   
-  // --- Plans ---
-  export const plans = pgTable('plans', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 20 }),
-    priceUsd: numeric('price_usd'),
-    billingCycle: varchar('billing_cycle', { length: 20 }),
-  });
-  
   // --- User Subscriptions ---
   export const userSubscriptions = pgTable('user_subscriptions', {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id').references(() => users.id),
-    planId: uuid('plan_id').references(() => plans.id),
+    plan: varchar('plan', { length: 20 }),
     startedAt: timestamp('started_at').defaultNow(),
     expiresAt: timestamp('expires_at'),
     isActive: boolean('is_active').default(true),
