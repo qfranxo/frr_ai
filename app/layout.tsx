@@ -38,8 +38,8 @@ export default function RootLayout({
       }}
       signInUrl="/auth/login"
       signUpUrl="/auth/register"
-      signInFallbackRedirectUrl="/"
-      signUpFallbackRedirectUrl="/"
+      afterSignInUrl="/"
+      afterSignUpUrl="/"
     >
       <html lang="ko" suppressHydrationWarning className={`${kodeMono.variable} ${rubikDoodleShadow.variable}`}>
         <head>
