@@ -1,25 +1,25 @@
-"use client";
+'use client';
 
-import { SignUp } from "@clerk/nextjs";
+import { SignIn } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
-export default function RegisterPage() {
+export default function LoginPage() {
   const router = useRouter();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">회원가입</h1>
+          <h1 className="text-3xl font-bold text-gray-900">로그인</h1>
           <p className="mt-2 text-sm text-gray-600">
-            새 계정을 만드세요
+            계정에 로그인하세요
           </p>
         </div>
         
-        <SignUp 
-          path="/auth/register"
+        <SignIn 
+          path="/auth/login"
           routing="path" 
-          signInUrl="/auth/login"
+          signUpUrl="/auth/register"
           redirectUrl="/"
         />
         
