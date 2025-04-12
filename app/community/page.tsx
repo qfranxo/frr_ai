@@ -660,35 +660,66 @@ function CommunityContent() {
     if (!postIds.length) return {};
     
     try {
-      // 모든 postId에 대한 댓글을 병렬로 가져옴
-      const commentsPromises = postIds.map(id => 
-        communityApi.loadCommentsForImage(id)
-          .catch(() => ({ success: false, data: [] }))
-      );
-      
-      // 병렬로 모든 요청 처리
-      const results = await Promise.all(commentsPromises);
-      
-      // 결과를 postId별로 매핑
+      // 배치 처리를 위한 설정
+      const BATCH_SIZE = 5; // 한 번에 처리할 요청 수
       const commentsMap: Record<string, Comment[]> = {};
       
-      results.forEach((result, index) => {
-        const postId = postIds[index];
-        
-        if (result.success && Array.isArray(result.data)) {
-          // 모든 댓글에 대해 normalizeComment 적용
-          commentsMap[postId] = result.data.map((comment: any) => normalizeComment(comment))
-            .sort((a, b) => {
-              try {
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-              } catch {
-                return 0;
-              }
-            });
-        } else {
-          commentsMap[postId] = [];
+      // 캐시에서 먼저 데이터 로드
+      let remainingPostIds = [...postIds];
+      for (const postId of postIds) {
+        const cachedComments = loadCommentsFromCache(postId);
+        if (cachedComments && cachedComments.length > 0) {
+          commentsMap[postId] = cachedComments;
+          // 이미 캐시에서 로드한 ID는 요청 목록에서 제거
+          remainingPostIds = remainingPostIds.filter(id => id !== postId);
         }
-      });
+      }
+      
+      // 캐시에서 로드하지 못한 ID만 배치 처리
+      for (let i = 0; i < remainingPostIds.length; i += BATCH_SIZE) {
+        const batch = remainingPostIds.slice(i, i + BATCH_SIZE);
+        
+        // 배치 내 모든 요청 동시 실행
+        const batchPromises = batch.map(id => 
+          communityApi.loadCommentsForImage(id)
+            .catch(error => {
+              console.error(`댓글 로드 오류 (ID: ${id}):`, error);
+              return { success: false, data: [], error: String(error) };
+            })
+        );
+        
+        // 배치 단위로 처리 (병렬 요청 수 제한)
+        const batchResults = await Promise.all(batchPromises);
+        
+        // 결과 처리
+        batchResults.forEach((result, index) => {
+          const postId = batch[index];
+          
+          if (result.success && Array.isArray(result.data)) {
+            // 모든 댓글에 대해 normalizeComment 적용
+            const normalizedComments = result.data.map((comment: any) => normalizeComment(comment))
+              .sort((a, b) => {
+                try {
+                  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                } catch {
+                  return 0;
+                }
+              });
+            
+            commentsMap[postId] = normalizedComments;
+            
+            // 캐시에 저장
+            saveCommentsToCache(postId, normalizedComments);
+          } else {
+            commentsMap[postId] = [];
+          }
+        });
+        
+        // 배치 사이에 짧은 지연을 두어 서버 부하 분산
+        if (i + BATCH_SIZE < remainingPostIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
       
       return commentsMap;
     } catch (error) {
@@ -891,35 +922,56 @@ function CommunityContent() {
   };
 
   // 백그라운드에서 댓글 데이터 업데이트 (사용자 경험에 영향 없이)
-  const fetchCommentsInBackground = (postId: string) => {
-    communityApi.loadCommentsForImage(postId)
-      .then(result => {
-        if (result.success && Array.isArray(result.data)) {
-          const comments = result.data.map((comment: any) => normalizeComment(comment))
-            .sort((a, b) => {
-              try {
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-              } catch {
-                return 0;
-              }
-            });
-            
-          // 기존 댓글과 새 댓글이 다른 경우에만 업데이트
-          const existingComments = commentsLocalMap[postId] || [];
-          if (JSON.stringify(existingComments) !== JSON.stringify(comments)) {
-            setCommentsLocalMap(prev => ({
-              ...prev,
-              [postId]: comments
-            }));
-            
-            // 캐시 업데이트
-            saveCommentsToCache(postId, comments);
-          }
+  const fetchCommentsInBackground = async (postId: string) => {
+    // 이미 요청 중인지 확인하는 방어 코드
+    const loadingKey = `loading_comments_${postId}`;
+    const windowAny = window as any;
+    
+    if (windowAny[loadingKey]) {
+      console.log(`댓글 ${postId} 이미 로딩 중, 중복 요청 방지`);
+      return;
+    }
+    
+    // 로딩 상태 설정
+    windowAny[loadingKey] = true;
+    
+    try {
+      const result = await communityApi.loadCommentsForImage(postId);
+      
+      if (result.success && Array.isArray(result.data)) {
+        const comments = result.data.map((comment: any) => normalizeComment(comment))
+          .sort((a, b) => {
+            try {
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            } catch {
+              return 0;
+            }
+          });
+          
+        // 기존 댓글과 새 댓글이 다른 경우에만 업데이트
+        const existingComments = commentsLocalMap[postId] || [];
+        const hasNewComments = comments.length !== existingComments.length || 
+          JSON.stringify(comments.map(c => c.id)) !== JSON.stringify(existingComments.map(c => c.id));
+          
+        if (hasNewComments) {
+          setCommentsLocalMap(prev => ({
+            ...prev,
+            [postId]: comments
+          }));
+          
+          // 캐시 업데이트
+          saveCommentsToCache(postId, comments);
+          
+          // 추가 로그: 댓글 개수 변화 표시
+          console.log(`댓글 백그라운드 업데이트 (${postId}): ${existingComments.length} -> ${comments.length}`);
         }
-      })
-      .catch(error => {
-        console.error("백그라운드 댓글 업데이트 오류:", error);
-      });
+      }
+    } catch (error) {
+      console.error("백그라운드 댓글 업데이트 오류:", error);
+    } finally {
+      // 로딩 상태 해제
+      windowAny[loadingKey] = false;
+    }
   };
 
   const closeCommentModalCustom = () => {
@@ -1391,9 +1443,12 @@ function CommunityContent() {
     }
   };
 
-  // 공유하기 기능 - 빈 함수로 변경
+  // 공유하기 기능 - 빈 함수로 유지
   const handleShare = async (imageId: string) => {
-    // 공유 기능 비활성화
+    // 즉시 UI 피드백 제공
+    toast.success('공유 기능이 비활성화되었습니다.');
+    
+    // 추가 로직 없이 콘솔 로그만 남김
     console.log('Share functionality disabled');
   };
 

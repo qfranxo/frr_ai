@@ -21,7 +21,6 @@ function emptyCommentsResponse(warning: string = '') {
 
 export async function GET(req: NextRequest) {
   try {
-    console.log('[GET_COMMENTS] 전체 요청 URL:', req.url);
     const { searchParams } = new URL(req.url)
     const imageId = searchParams.get('imageId') || searchParams.get('image_id')
 
@@ -29,74 +28,59 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'imageId is required' }, { status: 400 })
     }
 
-    console.log(`[GET_COMMENTS] Fetching comments for imageId: ${imageId}`);
+    // 최소한의 로깅만 유지
+    console.log(`[GET_COMMENTS] 요청: imageId=${imageId}`);
 
     try {
-      // 데이터베이스 연결 및 오류 처리 개선
-      console.log('[GET_COMMENTS] 데이터베이스 쿼리 시작...');
-      console.log('[GET_COMMENTS] 쿼리 파라미터 imageId 타입:', typeof imageId);
-      console.log('[GET_COMMENTS] 쿼리 파라미터 imageId 값:', imageId);
-      
-      // 정확한 비교를 위해 문자열로 변환하여 비교 (DB에서 타입이 다를 수 있음)
+      // 응답 성능 최적화: 필요한 필드만 선택적으로 가져오기
       const data = await db
-        .select()
+        .select({
+          id: comments.id,
+          imageId: comments.imageId,
+          userId: comments.userId,
+          userName: comments.userName,
+          content: comments.content,
+          createdAt: comments.createdAt,
+        })
         .from(comments)
         .where(eq(comments.imageId, String(imageId)))
         .orderBy(desc(comments.createdAt))
+        .limit(100) // 최대 100개 댓글로 제한하여 성능 향상
       
-      console.log(`[GET_COMMENTS] Found ${data.length} comments for imageId: ${imageId}`);
-      if (data.length === 0) {
-        console.log(`[GET_COMMENTS] 해당 이미지의 댓글이 없음. 이미지 ID 확인: ${imageId}`);
-        console.log(`[GET_COMMENTS] DB에서 직접 확인을 위한 SQL: SELECT * FROM comments WHERE image_id = '${imageId}' ORDER BY created_at DESC`);
-      } else {
-        console.log(`[GET_COMMENTS] 첫 번째 댓글 ID: ${data[0].id}, 내용: ${data[0].content.substring(0, 20)}`);
-        console.log(`[GET_COMMENTS] 마지막 댓글 ID: ${data[data.length-1].id}, 내용: ${data[data.length-1].content.substring(0, 20)}`);
-      }
-      console.log('[GET_COMMENTS] 댓글 데이터 샘플:', data.length > 0 ? data[0] : '데이터 없음');
+      // 최소 로깅만 유지
+      console.log(`[GET_COMMENTS] ${imageId}에 대해 ${data.length}개 댓글 조회 완료`);
       
-      // 응답 데이터에 일관된 필드명 추가
+      // 응답 데이터에 일관된 필드명 추가 (필드 매핑 최소화)
       const normalizedData = data.map(comment => ({
         ...comment,
         image_id: comment.imageId,
         user_id: comment.userId,
         user_name: comment.userName,
         text: comment.content,
-        created_at: comment.createdAt
       }));
       
       // 결과가 없는 경우 빈 배열 응답
       if (!normalizedData || normalizedData.length === 0) {
-        console.log('[GET_COMMENTS] 정규화 후에도 데이터가 없음, 빈 배열 반환');
-        return emptyCommentsResponse('댓글이 없습니다.');
+        return emptyCommentsResponse();
       }
       
+      // 캐싱 헤더 개선: 5분 동안 캐싱 허용 (댓글은 항상 최신일 필요는 없음)
       return NextResponse.json({ 
         success: true, 
         data: normalizedData 
       }, {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
+          'Cache-Control': 'public, max-age=300, s-maxage=600',
+          'Expires': new Date(Date.now() + 300000).toUTCString() // 5분
         }
       });
     } catch (queryError) {
-      console.error('[GET_COMMENTS] 데이터베이스 쿼리 오류:', queryError);
-      
-      // 임시 대응책: 데이터베이스 연결 실패 시 빈 배열 반환 (프로덕션에서는 적절히 수정 필요)
-      return emptyCommentsResponse('데이터베이스 연결에 문제가 있어 댓글을 가져올 수 없습니다.');
+      console.error('[GET_COMMENTS] 데이터베이스 오류:', queryError);
+      return emptyCommentsResponse();
     }
   } catch (err) {
     console.error('[GET_COMMENTS_ERROR]', err);
-    
-    // 더 자세한 오류 정보 로깅
-    if (err instanceof Error) {
-      console.error(`Error details: ${err.message}`);
-      console.error(`Error stack: ${err.stack}`);
-    }
-    
-    // 클라이언트에게 빈 응답 반환 (오류가 아닌 빈 데이터로 처리)
-    return emptyCommentsResponse('시스템 오류로 댓글을 가져올 수 없습니다.');
+    return emptyCommentsResponse();
   }
 }
 

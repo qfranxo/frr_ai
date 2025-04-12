@@ -8,6 +8,10 @@ export default function ToasterProvider() {
 
   useEffect(() => {
     setIsMounted(true);
+    
+    return () => {
+      setIsMounted(false);
+    };
   }, []);
 
   if (!isMounted) {
@@ -20,6 +24,10 @@ export default function ToasterProvider() {
       toastOptions={{
         closeButton: true,
         duration: 3000,
+        style: {
+          background: '#fff',
+          color: '#333',
+        }
       }}
       richColors 
       closeButton

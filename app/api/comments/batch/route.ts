@@ -1,13 +1,101 @@
 import { db } from '@/lib/db'
 import { comments } from '@/db/migrations/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, desc, inArray } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod' // 입력 검증을 위한 Zod
 
-// 입력값 스키마 정의
-const batchRequestSchema = z.object({
-  imageIds: z.array(z.string()).min(1).max(100) // 최대 100개 이미지 ID로 제한
-})
+// 일관된 빈 응답을 위한 헬퍼 함수
+function emptyBatchResponse() {
+  return NextResponse.json({ 
+    success: true, 
+    data: {} 
+  }, {
+    headers: {
+      'Cache-Control': 'public, max-age=300, s-maxage=600',
+      'Expires': new Date(Date.now() + 300000).toUTCString() // 5분
+    }
+  });
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const imageIds = searchParams.getAll('imageIds')
+
+    if (!imageIds || imageIds.length === 0) {
+      return NextResponse.json({ success: false, error: 'imageIds parameter is required' }, { status: 400 })
+    }
+
+    // 최대 10개 이미지로 제한 (성능 보장)
+    const limitedImageIds = imageIds.slice(0, 10);
+    console.log(`[BATCH_COMMENTS] 요청: ${limitedImageIds.length}개 이미지 댓글 로드`);
+
+    try {
+      // 하나의 쿼리로 모든 이미지에 대한 댓글 조회
+      const data = await db
+        .select({
+          id: comments.id,
+          imageId: comments.imageId,
+          userId: comments.userId,
+          userName: comments.userName,
+          content: comments.content,
+          createdAt: comments.createdAt,
+        })
+        .from(comments)
+        .where(inArray(comments.imageId, limitedImageIds.map(id => String(id))))
+        .orderBy(desc(comments.createdAt))
+        .limit(200) // 전체 최대 200개로 제한
+
+      // 이미지 ID별로 댓글 그룹화
+      const groupedComments: Record<string, any[]> = {};
+      
+      // 초기화 (빈 배열 보장)
+      limitedImageIds.forEach(id => {
+        if (id) {
+          groupedComments[id] = [];
+        }
+      });
+      
+      // 각 댓글을 올바른 이미지 그룹에 추가
+      data.forEach(comment => {
+        const imageId = comment.imageId;
+        
+        if (imageId && typeof imageId === 'string') {
+          if (!groupedComments[imageId]) {
+            groupedComments[imageId] = [];
+          }
+          
+          // 필드 매핑
+          groupedComments[imageId].push({
+            ...comment,
+            image_id: comment.imageId,
+            user_id: comment.userId,
+            user_name: comment.userName,
+            text: comment.content,
+          });
+        }
+      });
+      
+      console.log(`[BATCH_COMMENTS] ${data.length}개 댓글 로드 완료`);
+      
+      // 캐싱 헤더를 포함하여 응답
+      return NextResponse.json({ 
+        success: true, 
+        data: groupedComments 
+      }, {
+        headers: {
+          'Cache-Control': 'public, max-age=300, s-maxage=600',
+          'Expires': new Date(Date.now() + 300000).toUTCString() // 5분
+        }
+      });
+    } catch (queryError) {
+      console.error('[BATCH_COMMENTS] 데이터베이스 오류:', queryError);
+      return emptyBatchResponse();
+    }
+  } catch (err) {
+    console.error('[BATCH_COMMENTS_ERROR]', err);
+    return emptyBatchResponse();
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

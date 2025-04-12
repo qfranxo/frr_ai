@@ -8,7 +8,6 @@ import Script from "next/script";
 import { BlobAnimation } from "@/components/ui/blob-animation";
 import ToasterProvider from "@/components/providers/ToasterProvider";
 import { kodeMono, rubikDoodleShadow } from "./fonts";
-import { Toaster } from 'sonner';
 import ClientWrapper from "@/components/providers/ClientWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -70,7 +69,6 @@ export default function RootLayout({
             </ClientWrapper>
           </GeistWrapper>
           <ToasterProvider />
-          <Toaster position="top-right" richColors />
           <Script id="scroll-handler" strategy="afterInteractive">
             {`
               (function() {

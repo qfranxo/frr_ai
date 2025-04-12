@@ -80,8 +80,10 @@ export async function apiRequest<T = any>(
       const controller = new AbortController();
       requestOptions.signal = controller.signal;
       
-      // 타임아웃 설정
-      const timeoutSeconds = 10;
+      // 타임아웃 설정 (댓글 관련 요청은 더 긴 타임아웃 적용)
+      const isCommentsRequest = endpoint.includes('/api/comments');
+      const timeoutSeconds = isCommentsRequest ? 30 : 15; // 댓글 요청은 30초, 다른 요청은 15초
+      
       let timeoutHandler: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
         try {
           // 명시적인 reason 메시지 제공
@@ -278,6 +280,60 @@ export const communityApi = {
       showErrorToast: false,
       cache: 'no-store'
     });
+  },
+  
+  // 여러 이미지의 댓글을 일괄 조회하는 함수 (배치 처리)
+  loadCommentsForImageBatch: async (imageIds: string[]) => {
+    if (!imageIds.length) return { success: true, data: {} };
+    
+    // URL 파라미터 구성 (최대 5개까지 허용)
+    const batchSize = 5;
+    const batches = [];
+    
+    // 배치 처리를 위해 5개씩 나누기
+    for (let i = 0; i < imageIds.length; i += batchSize) {
+      const batchIds = imageIds.slice(i, i + batchSize);
+      batches.push(batchIds);
+    }
+    
+    // 결과를 저장할 객체
+    const results: Record<string, any[]> = {};
+    
+    // 각 배치를 순차적으로 처리
+    for (const batch of batches) {
+      try {
+        // 쿼리 파라미터 구성
+        const params = new URLSearchParams();
+        batch.forEach(id => params.append('imageIds', id));
+        
+        // API 호출
+        const response = await apiRequest(`/api/comments/batch?${params.toString()}`, {
+          method: 'GET',
+          showErrorToast: false,
+          cache: 'no-store'
+        });
+        
+        // 성공적인 응답 처리
+        if (response.success && response.data) {
+          // 결과 병합
+          Object.assign(results, response.data);
+        }
+        
+        // 배치 사이에 짧은 지연을 두어 서버 부하 조절
+        if (batches.indexOf(batch) < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error('배치 댓글 로드 중 오류:', error);
+        // 오류가 발생해도 계속 진행
+      }
+    }
+    
+    return { 
+      success: true, 
+      data: results,
+      source: 'batch-api'
+    };
   },
   
   // 댓글 삭제
