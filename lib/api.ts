@@ -105,7 +105,7 @@ export async function apiRequest<T = any>(
             return { 
               success: false, 
               error: errorJson.error || `Server error: ${response.status}`,
-              source: 'http-error' 
+              source: 'http-error-text' 
             };
           } catch (parseError) {
             // JSON 파싱 실패 - 텍스트 응답 반환
@@ -118,7 +118,7 @@ export async function apiRequest<T = any>(
             return { 
               success: false, 
               error: errorText || `Server error: ${response.status}`,
-              source: 'http-error-text' 
+              source: 'http-error-unknown' 
             };
           }
         } catch (textError) {
@@ -158,6 +158,30 @@ export async function apiRequest<T = any>(
         return result;
       } catch (parseError) {
         console.error(`JSON parsing error for ${endpoint}:`, parseError);
+        
+        // 응답 텍스트를 직접 확인해보기
+        try {
+          const responseText = await response.text();
+          console.log(`응답 원문 (처음 100자): ${responseText.substring(0, 100)}...`);
+          
+          if (responseText.startsWith('An error occurred')) {
+            // 서버 오류 메시지가 반환된 경우 
+            if (showErrorToast) {
+              toast.error(responseText.substring(0, 100), {
+                position: 'top-center',
+                duration: 3000,
+              });
+            }
+            
+            return { 
+              success: false, 
+              error: responseText,
+              source: 'server-error-message' 
+            };
+          }
+        } catch (textError) {
+          console.error('응답 텍스트 추출 오류:', textError);
+        }
         
         if (showErrorToast) {
           toast.error('Invalid response format', {

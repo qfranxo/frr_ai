@@ -755,16 +755,18 @@ function GenerateContent() {
         enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.clothing[selectedClothing as keyof typeof modelStyleMapping.clothing]}`;
       }
       
-      // 눈 색상 추가
+      // 눈 색상 추가 (선택된 경우에만 간소화된 프롬프트 사용)
       if (selectedEyes) {
-        enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.eyes[selectedEyes as keyof typeof modelStyleMapping.eyes]}, symmetrical eyes, natural looking eyes, detailed eye texture, realistic eye reflections, detailed irises, realistic eyebrows, natural eyelashes`;
-      } else {
-        // 눈 색상이 선택되지 않았더라도 자연스러운 눈에 대한 프롬프트 추가
-        enhancedPrompt = `${enhancedPrompt}, symmetrical eyes, natural looking eyes, detailed eye texture, realistic eye reflections, detailed irises, realistic eyebrows, natural eyelashes`;
+        // 색상만 추가하고 상세한 눈 묘사는 제거 (오버레이 문제 방지)
+        enhancedPrompt = `${enhancedPrompt}, ${modelStyleMapping.eyes[selectedEyes as keyof typeof modelStyleMapping.eyes]}`;
       }
+      // 선택되지 않은 경우 눈 관련 프롬프트를 추가하지 않음
       
       // 부정적인 프롬프트 추가 (기형적인 특징 방지)
       let negativePrompt = "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, ugly, disgusting, amputation, blurry, blurred, watermark, text, poorly drawn face, poorly drawn hands, missing fingers, extra fingers, fused fingers, too many fingers";
+      
+      // 눈 오버레이 문제 방지를 위한 부정적 프롬프트 추가
+      negativePrompt += ", eyes overlay, eyes background, floating eyes, disembodied eyes, eyes in background, giant eyes, unrealistic eye size, eye grid, multiple eyes, eyes collage, eye montage, eyes above scene, eyes in sky";
       
       // 렌더링 스타일에 따라 부정적 프롬프트 조정
       if (selectedRenderStyle === "anime") {
@@ -785,134 +787,107 @@ function GenerateContent() {
         cameraDistance: selectedCameraDistance
       });
       
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: enhancedPrompt,
-          negative_prompt: negativePrompt,
-          style: selectedStyle,
-          size: selectedSize,
-          gender: selectedGender,
-          age: selectedAge,
-          ratio: selectedRatio,
-          renderStyle: selectedRenderStyle,
-          cameraDistance: selectedCameraDistance
-        }),
-      });
-
-      const result = await response.json();
-      
-      // 자세한 로깅 추가
-      debugLog("API 응답:", result);
-      debugLog("요청했던 성별:", selectedGender);
-      debugLog("결과 성별 확인:", result.gender || "응답에 성별 정보 없음");
-      
-      if (!response.ok) {
-        // 사용량 제한 응답 확인
-        if (response.status === 403 && result.subscription) {
-          setSubscription(result.subscription);
-          setShowLimitModal(true);
-          setShowLoadingModal(false);
-          setIsLoading(false);
-          setLoadingProgress(0); // 로딩 진행 상태 초기화
-          return;
+      try {
+        const response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: enhancedPrompt,
+            negative_prompt: negativePrompt,
+            style: selectedStyle,
+            size: selectedSize,
+            gender: selectedGender,
+            age: selectedAge,
+            ratio: selectedRatio,
+            renderStyle: selectedRenderStyle,
+            cameraDistance: selectedCameraDistance
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API 요청 실패: ${response.status} ${errorText}`);
         }
         
-        // 에러 메시지 처리 개선
-        let errorMessage = result.error || "이미지 생성 실패";
+        const result = await response.json();
         
-        // Replicate API 월별 지출 한도 오류 처리
-        if (errorMessage.includes("Monthly spend limit reached") || errorMessage.includes("Payment Required") || errorMessage.includes("Service usage limit")) {
-          errorMessage = "Service usage limit reached. Please contact admin or try again later.";
-          console.error("API service limit error:", result.error);
+        // 자세한 로깅 추가
+        debugLog("API 응답:", result);
+        debugLog("요청했던 성별:", selectedGender);
+        debugLog("결과 성별 확인:", result.gender || "응답에 성별 정보 없음");
+        
+        // 출력 확인
+        if (result.output) {
+          debugLog("생성된 이미지 URL:", result.output);
           
-          // 서비스 한도 알림 표시
-          setShowServiceLimitAlert(true);
+          // 구독 정보 업데이트
+          if (result.subscription) {
+            setSubscription(result.subscription);
+          }
           
-          // 한도 오류 발생 시 추가 안내
-          setTimeout(() => {
-            toast.info("Please try again later or try with different style options.");
-          }, 2000);
+          // 잠금 해제 - 결과가 나와도 잠금을 해제하여 다른 옵션으로 시도 가능하도록 함
+          setAspectRatioLocked(false);
+          setGenderAgeLocked(false);
+          
+          // 이미지 URL을 상태에 저장
+          const newImage: GeneratedImage = {
+            id: `image_${Date.now()}`,
+            imageUrl: result.output,
+            prompt: prompt,
+            style: selectedStyle,
+            renderingStyle: selectedRenderStyle,
+            author: user?.username || user?.firstName || 'frr ai user',
+            createdAt: new Date().toISOString(),
+            gender: selectedGender,
+            age: selectedAge,
+            ratio: selectedRatio,
+            cameraDistance: selectedCameraDistance || "medium",
+            storagePath: result.storagePath || '',
+            aspectRatio: result.aspectRatio || selectedRatio || '9:16' // 1:1 대신 선택된 비율 또는 9:16 사용
+          };
+          
+          // 히스토리에 저장
+          saveToHistory(newImage);
+          
+          // 결과 배열 업데이트
+          switch (buttonType) {
+            case 'another':
+              // Another Generate 버튼 클릭 시 (새 결과 추가)
+              setResults(prevResults => [...prevResults, newImage]);
+              break;
+            case 'new':
+              // Generate New 버튼 클릭 시 (모든 결과 초기화하고 새 결과 추가)
+              setResults([newImage]);
+              break;
+            case 'generate':
+            default:
+              // Generate AI Model 버튼 클릭 시 (첫 번째 결과로 설정)
+              setResults([newImage]);
+              break;
+          }
+          
+          // 자동 공유 코드 제거 - 사용자가 명시적으로 공유 버튼을 클릭할 때만 공유되도록 함
+          
+          completeLoading();
         } else {
-          console.error("API error:", errorMessage);
+          // 출력이 없는 경우
+          console.error("API 응답에 output이 없습니다:", result);
+          toast.error("Failed to generate image. Please try again.");
+          setShowLoadingModal(false);
         }
-        
-        toast.error(errorMessage);
-        
-        // 모든 로딩 상태 확실히 해제
-        setShowLoadingModal(false);
+      } catch (error) {
+        console.error("Error:", error);
+        toast.error(error instanceof Error ? error.message : "An error occurred while generating the image.");
+        setShowLoadingModal(false); // 오류 시 로딩 모달 닫기
+      } finally {
         setIsLoading(false);
-        setLoadingProgress(0); // 로딩 진행 상태 초기화
-        return;
-      }
-      
-      // 출력 확인
-      if (result.output) {
-        debugLog("생성된 이미지 URL:", result.output);
-        
-        // 구독 정보 업데이트
-        if (result.subscription) {
-          setSubscription(result.subscription);
-        }
-        
-        // 잠금 해제 - 결과가 나와도 잠금을 해제하여 다른 옵션으로 시도 가능하도록 함
-        setAspectRatioLocked(false);
-        setGenderAgeLocked(false);
-        
-        // 이미지 URL을 상태에 저장
-        const newImage: GeneratedImage = {
-          id: `image_${Date.now()}`,
-          imageUrl: result.output,
-          prompt: prompt,
-          style: selectedStyle,
-          renderingStyle: selectedRenderStyle,
-          author: user?.username || user?.firstName || 'frr ai user',
-          createdAt: new Date().toISOString(),
-          gender: selectedGender,
-          age: selectedAge,
-          ratio: selectedRatio,
-          cameraDistance: selectedCameraDistance || "medium",
-          storagePath: result.storagePath || '',
-          aspectRatio: result.aspectRatio || selectedRatio || '9:16' // 1:1 대신 선택된 비율 또는 9:16 사용
-        };
-        
-        // 히스토리에 저장
-        saveToHistory(newImage);
-        
-        // 결과 배열 업데이트
-        switch (buttonType) {
-          case 'another':
-            // Another Generate 버튼 클릭 시 (새 결과 추가)
-            setResults(prevResults => [...prevResults, newImage]);
-            break;
-          case 'new':
-            // Generate New 버튼 클릭 시 (모든 결과 초기화하고 새 결과 추가)
-            setResults([newImage]);
-            break;
-          case 'generate':
-          default:
-            // Generate AI Model 버튼 클릭 시 (첫 번째 결과로 설정)
-            setResults([newImage]);
-            break;
-        }
-        
-        // 자동 공유 코드 제거 - 사용자가 명시적으로 공유 버튼을 클릭할 때만 공유되도록 함
-        
-        completeLoading();
-      } else {
-        // 출력이 없는 경우
-        console.error("API 응답에 output이 없습니다:", result);
-        toast.error("Failed to generate image. Please try again.");
-        setShowLoadingModal(false);
       }
     } catch (error) {
-      console.error("Error:", error);
-      toast.error(error instanceof Error ? error.message : "An error occurred while generating the image.");
-      setShowLoadingModal(false); // 오류 시 로딩 모달 닫기
-    } finally {
+      console.error("Error preparing prompt:", error);
+      toast.error("Failed to prepare image generation. Please try again.");
+      setShowLoadingModal(false);
       setIsLoading(false);
     }
   };
@@ -2069,4 +2044,4 @@ export default function Generate() {
       <GenerateContent />
     </Suspense>
   );
-} 
+}; 

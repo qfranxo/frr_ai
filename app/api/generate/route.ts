@@ -317,7 +317,8 @@ export async function POST(request: Request) {
         prompt: enhancedPrompt, // 강화된 프롬프트 사용
         size: finalSize, // 비율에 맞는 사이즈 사용
         style: style,
-        negative_prompt: negativePrompt
+        negative_prompt: negativePrompt + ", collage, multiple images, eye grid, multiple panels, dual images, two images in one frame, composite image, split image, stacked images",
+        num_outputs: 1 // 단일 이미지만 생성
       },
     };
     
@@ -371,7 +372,7 @@ export async function POST(request: Request) {
       // 이미지 URL (Replicate의 출력)
       const imageUrl = Array.isArray(result.output) && result.output.length > 0 
         ? result.output[0] 
-        : (result.output || null); // null을 명시적으로 설정
+        : (typeof result.output === 'string' ? result.output : null); // 문자열인 경우에만 사용, 아니면 null
       
       // 이미지 URL이 없으면 오류 반환
       if (!isValidImageUrl(imageUrl)) {
@@ -416,13 +417,18 @@ export async function POST(request: Request) {
       
       // DB 연결 여부와 상관없이 이미지 생성 결과 반환
       return NextResponse.json({
-        ...result,
+        output: imageUrl, // 단일 이미지 URL만 반환
+        status: "succeeded",
         generatedImage
       });
     }
 
     // 기본 응답
-    return NextResponse.json(result);
+    return NextResponse.json({
+      status: result.status,
+      output: null,
+      error: result.error || "Unknown error"
+    });
   } catch (error) {
     console.error("Error generating image:", error);
     

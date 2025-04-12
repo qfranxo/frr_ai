@@ -3,9 +3,9 @@ import { IModelOptions } from "@/types";
 export function generateEnhancedPrompt(prompt: string, options: IModelOptions): string {
   // 기본 프롬프트 향상
   let enhancedPrompt = prompt;
-
-  // 자연스러운 눈을 위한 향상
-  enhancedPrompt = addNaturalEyesEnhancement(enhancedPrompt);
+  
+  // 이제 눈 향상 기능은 사용하지 않고, 품질 향상만 적용
+  // enhancedPrompt = addNaturalEyesEnhancement(enhancedPrompt);
   
   // 기본 품질 향상 키워드 추가
   enhancedPrompt = addQualityEnhancements(enhancedPrompt);
@@ -13,8 +13,13 @@ export function generateEnhancedPrompt(prompt: string, options: IModelOptions): 
   return enhancedPrompt;
 }
 
-// 자연스러운 눈을 위한 프롬프트 향상
+// 자연스러운 눈을 위한 프롬프트 향상 - 비활성화
 export function addNaturalEyesEnhancement(prompt: string): string {
+  // 기능 비활성화 - 눈 관련 프롬프트 추가하지 않음
+  return prompt;
+  
+  // 아래 코드는 비활성화됨
+  /*
   const eyeEnhancements = [
     "symmetrical eyes",
     "natural looking eyes", 
@@ -38,16 +43,14 @@ export function addNaturalEyesEnhancement(prompt: string): string {
     keyword => prompt.toLowerCase().includes(keyword)
   );
   
-  // 이미 눈 관련 키워드가 있다면 약간의 향상만 추가
+  // 이미 눈 관련 키워드가 있다면 눈 향상을 추가하지 않음 (합성 이미지 문제 방지)
   if (hasEyeKeywords) {
-    return `${prompt}, symmetrical eyes, natural looking eyes, lifelike eyes`;
+    return prompt;
   }
   
-  // 없다면 전체 눈 향상 프롬프트 추가
-  // 중복을 피하기 위해 무작위로 3개의 눈 향상 키워드만 선택
-  const selectedEnhancements = eyeEnhancements.sort(() => 0.5 - Math.random()).slice(0, 3);
-  
-  return `${prompt}, ${selectedEnhancements.join(', ')}`;
+  // 눈 향상 키워드를 최소화하여 추가 (문제 최소화)
+  return `${prompt}, symmetrical eyes, natural looking eyes`;
+  */
 }
 
 // 이미지 품질 향상을 위한 프롬프트 추가
@@ -83,12 +86,15 @@ export function generateNegativePrompt(renderStyle: string = 'realistic'): strin
   // 기본 네거티브 프롬프트
   let negativePrompt = "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, ugly, disgusting, amputation, blurry, blurred, watermark, text, poorly drawn face, poorly drawn hands";
   
+  // 콜라주 이미지 방지 네거티브 프롬프트 추가
+  negativePrompt += ", collage, multiple images, eye grid, multiple panels, dual images, two images in one frame, composite image, split image, stacked images, image grid, combining images, two separate photos, side by side images, double exposure";
+  
   // 렌더링 스타일에 따라 네거티브 프롬프트 조정
   if (renderStyle === "anime") {
     negativePrompt += ", realistic face, realistic skin, 3D rendering, photorealistic, realistic lighting, realism, photorealism, realistic texture, too realistic";
   } else {
     // 사실적 스타일에서는 눈 관련 네거티브 프롬프트 강화
-    negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color, different sized eyes, mismatched eye colors, uneven eyes, droopy eyes, googly eyes, wall-eyed, cross-eyed, strabismus, lazy eye, unfocused eyes, unrealistic iris, unrealistic pupil, artificial looking eyes";
+    negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color, different sized eyes, mismatched eye colors, uneven eyes, droopy eyes, googly eyes, wall-eyed, cross-eyed, strabismus, lazy eye, unfocused eyes, unrealistic iris, unrealistic pupil, artificial looking eyes, closeup of eyes, eye detail shot, extreme closeup of eye, macro shot of eyes";
   }
   
   return negativePrompt;
