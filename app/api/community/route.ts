@@ -408,7 +408,7 @@ function addLocalSharedImage(newImage: SharedImage): SharedImage {
 // 좋아요 추가/삭제
 async function toggleLike(imageId: string, userId: string, isLiked: boolean) {
   try {
-    console.log(`좋아요 토글: image=${imageId}, user=${userId}, isLiked=${isLiked}`);
+    console.log(`좋아요 토글: image=${imageId}, user=***마스킹됨***, isLiked=${isLiked}`);
     
     // "shared-" 접두사 제거
     const pureImageId = imageId.replace('shared-', '');
@@ -496,7 +496,12 @@ function toggleLocalLike(imageId: string, isLiked: boolean): boolean {
 // 댓글 추가
 async function addComment(imageId: string, userId: string, userName: string, text: string): Promise<Comment | null> {
   try {
-    console.log("댓글 추가 요청:", { imageId, userId, userName, text });
+    console.log("댓글 추가 요청:", { 
+      imageId, 
+      userId: "***마스킹됨***", 
+      userName: "***마스킹됨***", 
+      text 
+    });
     const createdAt = new Date().toISOString();
     
     // "shared-" 접두사 제거하여 순수 UUID 얻기

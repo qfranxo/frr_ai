@@ -9,6 +9,11 @@ import { useUser, SignInButton } from '@clerk/nextjs';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { ConfirmModal } from '@/components/shared/ConfirmModal';
+import LoadingScreen from '@/components/shared/LoadingScreen';
 import { communityApi } from '@/lib/api';
 import { ImageCard } from '@/components/shared/ImageCard';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,8 +21,7 @@ import { formatDate } from '@/utils/format';
 import { useComments } from '@/hooks/useComments';
 import Masonry from 'react-masonry-css';
 import { AuthLikeButton, AuthCommentButton } from '@/components/shared/AuthButtons';
-import { ConfirmModal } from '@/components/shared/ConfirmModal';
-import LoadingScreen from '@/components/shared/LoadingScreen';
+import { safeLog } from '@/lib/security-logger';
 
 // 댓글 타입 정의
 interface Comment {
@@ -430,12 +434,12 @@ function CommunityContent() {
   useEffect(() => {
     // 사용자 데이터 로딩 상태 확인
     if (isLoaded) {
-      console.log("Clerk 사용자 정보 로딩 완료:", {
-        isSignedIn,
-        userId: user?.id,
-        userName: user?.firstName || user?.username,
-        userImage: user?.imageUrl
-      });
+      // 프로덕션 환경에서는 로깅하지 않음
+      if (process.env.NODE_ENV === 'development') {
+        // 개발 환경에서도 실제 정보 로깅 금지
+        // 외부에서 디버깅용 정보만 제공
+        console.log("개발 환경: 사용자 로그인 상태 확인 완료");
+      }
     }
   }, [user, isSignedIn, isLoaded]);
   

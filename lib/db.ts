@@ -167,7 +167,7 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
     }
 
     // 모든 로그인한 사용자에게 자동으로 스타터 플랜 부여
-    console.log(`Assigning starter plan to new user: ${userId}`);
+    console.log(`Assigning starter plan to new user: ***마스킹됨***`);
     
     // Create default starter subscription
     const defaultSubscription: SubscriptionInfo = {
@@ -296,7 +296,7 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
       if (updateError) {
         console.error('구독 사용량 업데이트 실패:', updateError);
       } else {
-        console.log(`사용자 ${userId}의 구독 사용량이 ${(subscriptionData.usage_count || 0) + 1}로 업데이트됨`);
+        console.log(`사용자 ***마스킹됨***의 구독 사용량이 ${(subscriptionData.usage_count || 0) + 1}로 업데이트됨`);
       }
     } else {
       // 구독 정보가 없으면 신규 생성 (새 사용자)
@@ -320,7 +320,7 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
       if (insertError) {
         console.error('신규 구독 생성 실패:', insertError);
       } else {
-        console.log(`사용자 ${userId}의 신규 구독 생성 완료 (사용량: 1)`);
+        console.log(`사용자 ***마스킹됨***의 신규 구독 생성 완료 (사용량: 1)`);
       }
     }
   } catch (dbError) {
@@ -399,7 +399,7 @@ export async function upgradeSubscription(userId: string): Promise<SubscriptionI
       throw new Error("User ID is required for subscription upgrade");
     }
     
-    console.log(`Upgrading subscription for user: ${userId}`);
+    console.log(`Upgrading subscription for user: ***마스킹됨***`);
     
     // In a real application, this would include a payment gateway integration
     // For demo purposes, we directly upgrade the subscription
@@ -423,10 +423,10 @@ export async function upgradeSubscription(userId: string): Promise<SubscriptionI
     usersSubscriptions.set(userId, subscriptionInfo);
     saveToStorage(); // 변경사항 저장
     
-    console.log(`Successfully upgraded subscription for user ${userId} to premium`);
+    console.log(`Successfully upgraded subscription for user ***마스킹됨*** to premium`);
     return subscriptionInfo;
   } catch (error) {
-    console.error(`Error upgrading subscription for user ${userId}:`, error);
+    console.error(`Error upgrading subscription for user ***마스킹됨***:`, error);
     throw new Error(`Failed to upgrade subscription: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

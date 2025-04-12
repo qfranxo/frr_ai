@@ -124,7 +124,12 @@ export async function POST(req: NextRequest) {
       text = formData.get('text') as string
       userName = formData.get('userName') as string || formData.get('user_name') as string || ''
       
-      console.log('[댓글 API] FormData 파라미터:', { imageId, userId, text: text?.substring(0, 20) + '...', userName });
+      console.log('[댓글 API] FormData 파라미터:', { 
+        imageId, 
+        userId: userId ? '***마스킹됨***' : 'null', 
+        text: text?.substring(0, 20) + '...', 
+        userName: userName ? '***마스킹됨***' : 'null' 
+      });
     } 
     // JSON 방식 처리 (application/json)
     else if (contentType.includes('application/json')) {
@@ -135,7 +140,12 @@ export async function POST(req: NextRequest) {
         text = jsonData.text
         userName = jsonData.userName || jsonData.user_name || ''
         
-        console.log('[댓글 API] JSON 파라미터:', { imageId, userId, text: text?.substring(0, 20) + '...', userName });
+        console.log('[댓글 API] JSON 파라미터:', { 
+          imageId, 
+          userId: userId ? '***마스킹됨***' : 'null', 
+          text: text?.substring(0, 20) + '...', 
+          userName: userName ? '***마스킹됨***' : 'null' 
+        });
       } catch (jsonError) {
         console.error('[댓글 API] JSON 파싱 오류:', jsonError);
         return NextResponse.json({ 
@@ -206,12 +216,15 @@ export async function POST(req: NextRequest) {
         : (userId.startsWith('user_') ? '사용자' : userId);
     }
 
-    console.log('[댓글 API] DB 저장 시도:', { imageId, userId });
+    console.log('[댓글 API] DB 저장 시도:', { 
+      imageId, 
+      hasUserId: !!userId 
+    });
     console.log('[댓글 API] DB 저장 시 imageId 타입:', typeof imageId);
     
     try {
       // INSERT 쿼리문 로깅
-      console.log(`[댓글 API] 실행할 SQL 문: INSERT INTO comments (imageId, userId, content, userName) VALUES ('${imageId}', '${userId}', '${text}', '${userName}')`);
+      console.log(`[댓글 API] 실행할 SQL 문: INSERT INTO comments (imageId, userId, content, userName) VALUES ('${imageId}', '***마스킹됨***', '${text?.substring(0, 20)}...', '***마스킹됨***')`);
       
       // 데이터베이스에 댓글 추가
       const [newComment] = await db
