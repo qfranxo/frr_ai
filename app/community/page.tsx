@@ -726,138 +726,139 @@ function CommunityContent() {
   // 댓글 핸들러 업데이트
   const handlePostComment = async (postId: string, text?: string) => {
     try {
-      if (!text) {
-        // 댓글 모달 열기
-        openCommentModalCustom(postId);
+      // 입력값이 없거나 로그인하지 않은 경우 처리 중단
+      if (!text?.trim() || !isSignedIn) {
+        // 로그인하지 않은 경우 안내 토스트 표시
+        if (!isSignedIn) {
+          toast.error('Please login to post comments', {
+            position: 'top-center',
+          });
+        }
         return;
       }
       
+      // 선택된 포스트 찾기
+      const post = communityData.find(p => String(p.id) === postId);
+      if (!post) {
+        console.error('[댓글 추가] 게시물을 찾을 수 없음:', postId);
+        return;
+      }
+      
+      console.log(`[댓글 추가] 시작: postId=${postId}, 댓글 길이=${text.length}`);
+      
+      // 임시 댓글 ID 생성 (로컬에서만 사용)
       const tempId = `temp-${Date.now()}`;
       const tempComment = {
         id: tempId,
         imageId: postId,
         userId: currentUser.id,
-        userName: currentUser.name,
-        text,
+        userName: currentUser.name || currentUser.username || '사용자',
+        text: text,
+        content: text,
         createdAt: new Date().toISOString()
       };
       
-      // 낙관적 UI 업데이트 - 댓글 추가
+      // 낙관적 UI 업데이트
       setCommentsMap(prev => ({
         ...prev,
         [postId]: [tempComment, ...(prev[postId] || [])]
       }));
       
-      // 게시글 데이터에 댓글 수 업데이트
-      setCommunityData(prev => prev.map(post => {
-        if (post.id === postId) {
-          const currentComments = post.comments || [];
-          return {
-            ...post,
-            comments: [tempComment, ...currentComments]
-          };
-        }
-        return post;
-      }));
+      // 선택한 게시물의 댓글 배열에도 임시 댓글 추가
+      const currentComments = post.comments || [];
+      post.comments = [
+        tempComment, 
+        ...currentComments
+      ];
       
-      // 토스트 표시
-      toast.success('Adding comment...');
+      // 댓글 입력 필드 초기화
+      handleCommentTextChange('');
       
-      // 댓글 목록 스크롤을 최신 댓글이 보이도록 즉시 조정
-      setTimeout(() => {
-        if (commentScrollRef.current) {
-          commentScrollRef.current.scrollTop = 0;
-        }
-      }, 50);
+      // 스크롤을 최상단으로 이동 (최신 댓글 표시)
+      if (commentScrollRef.current) {
+        commentScrollRef.current.scrollTop = 0;
+      }
       
+      // API 호출로 댓글 저장
+      console.log(`[댓글 API 호출] POST /api/comments 시작`);
       const response = await fetch('/api/comments', {
         method: 'POST',
-        body: JSON.stringify({
-          imageId: postId,
-          text
-        }),
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          imageId: postId,
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.username || '사용자',
+          text: text
+        })
       });
       
-      if (response.ok) {
-        const data = await response.json();
+      console.log(`[댓글 API 응답] 상태 코드: ${response.status}`);
+      const data = await response.json();
+      console.log(`[댓글 API 응답] 데이터:`, data);
+      
+      if (response.ok && data.success) {
+        // 서버에서 반환된 실제 댓글 ID로 낙관적 업데이트했던 임시 ID 교체
+        console.log(`[댓글 추가 성공] 임시 ID를 실제 ID로 교체: ${tempId} -> ${data.data.id}`);
         
-        if (data.success) {
-          // 실제 댓글로 교체 - data.comment가 undefined인 경우 안전하게 처리
-          setCommentsMap(prev => ({
-            ...prev,
-            [postId]: prev[postId].map(c => {
-              if (c.id === tempId) {
-                // data.comment가 존재하는지 확인
-                if (data.comment) {
-                  return { 
-                    ...data.comment, 
-                    text: data.comment.text || data.comment.content || text 
-                  };
-                } else {
-                  // API에서 comment 객체를 반환하지 않는 경우 원래 tempComment 유지하되 id만 업데이트
-                  return { 
-                    ...c, 
-                    id: data.id || data.commentId || c.id 
-                  };
-                }
-              }
-              return c;
-            })
-          }));
-          
-          // 게시글 데이터의 댓글 정보도 함께 업데이트
-          setCommunityData(prev => prev.map(post => {
-            if (post.id === postId) {
-              const updatedComments = (post.comments || []).map(c => {
-                if (c.id === tempId) {
-                  if (data.comment) {
-                    return { 
-                      ...data.comment, 
-                      text: data.comment.text || data.comment.content || text 
-                    };
-                  } else {
-                    return { 
-                      ...c, 
-                      id: data.id || data.commentId || c.id 
-                    };
-                  }
-                }
-                return c;
-              });
-              
-              return {
-                ...post,
-                comments: updatedComments
-              };
-            }
-            return post;
-          }));
-          
-          toast.success('Comment added successfully');
-          
-          // 댓글 입력 필드 초기화 (모달은 닫지 않음)
-          if (commentInputRef.current) {
-            commentInputRef.current.value = '';
-            if (handleCommentTextChange) handleCommentTextChange('');
-            
-            // 댓글 목록 스크롤을 최신 댓글이 보이도록 다시 한번 조정
-            if (commentScrollRef.current) {
-              commentScrollRef.current.scrollTop = 0;
-            }
-            
-            // 입력 필드에 즉시 포커스하여 연속 댓글 작성 용이하게
-            setTimeout(() => {
-              if (commentInputRef.current) commentInputRef.current.focus();
-            }, 100);
+        // commentsMap 업데이트
+        setCommentsMap(prev => ({
+          ...prev,
+          [postId]: prev[postId].map(c => 
+            c.id === tempId 
+              ? { ...c, id: data.data.id, createdAt: data.data.createdAt } 
+              : c
+          )
+        }));
+        
+        // 게시물의 comments 배열 업데이트
+        const updatedComments = (post.comments || []).map(c => {
+          if (c.id === tempId) {
+            return {
+              ...c,
+              id: data.data.id,
+              createdAt: data.data.createdAt
+            };
           }
-        }
+          return c;
+        });
+        
+        // 게시물 객체 댓글 업데이트
+        post.comments = updatedComments;
+        
+        // 사용자 피드백: 성공 토스트
+        toast.success('Comment posted', {
+          position: 'top-center',
+        });
+      } else {
+        // 서버 응답이 실패인 경우
+        console.error('[댓글 추가 실패]', data.error || '알 수 없는 오류');
+        
+        // 낙관적 업데이트 롤백
+        setCommentsMap(prev => ({
+          ...prev,
+          [postId]: prev[postId].filter(c => c.id !== tempId)
+        }));
+        
+        // 게시물 댓글 배열에서도 제거
+        post.comments = (post.comments || []).filter(c => c.id !== tempId);
+        
+        // 사용자 피드백: 실패 메시지
+        toast.error('Failed to post comment. Please try again.', {
+          position: 'top-center',
+        });
+      }
+      
+      // 스크롤을 최상단으로 이동 (최신 댓글 표시)
+      if (commentScrollRef.current) {
+        commentScrollRef.current.scrollTop = 0;
       }
     } catch (error) {
-      console.error('댓글 오류:', error);
-      toast.error('Failed to add comment');
+      console.error('[댓글 추가 오류]', error);
+      toast.error('Error posting comment', {
+        position: 'top-center',
+      });
     }
   };
   
@@ -1000,9 +1001,16 @@ function CommunityContent() {
     try {
       if (!postId) return defaultComments;
       
+      console.log(`[getPostComments] 요청된 postId: ${postId}`);
+      
       // 1. 게시물 객체에서 직접 comments 속성을 먼저 확인
       const post = communityData.find(p => p.id === postId);
+      console.log(`[getPostComments] 게시물 존재 여부:`, !!post);
+      console.log(`[getPostComments] post.comments 타입:`, post?.comments ? typeof post.comments : '없음');
+      console.log(`[getPostComments] post.comments 배열 여부:`, post?.comments ? Array.isArray(post.comments) : '없음');
+      
       if (post?.comments && Array.isArray(post.comments)) {
+        console.log(`[getPostComments] post.comments 길이:`, post.comments.length);
         // 댓글 데이터 유효성 확인 및 content/text 필드 호환성 처리
         return post.comments.map(comment => {
           // content와 text 필드 간 호환성 처리
@@ -1016,7 +1024,12 @@ function CommunityContent() {
       }
       
       // 2. 그 다음 commentsMap에서 확인
+      console.log(`[getPostComments] commentsMap 확인:`, !!commentsMap);
+      console.log(`[getPostComments] commentsMap[postId] 존재 여부:`, !!commentsMap[postId]);
+      console.log(`[getPostComments] commentsMap[postId] 배열 여부:`, commentsMap[postId] ? Array.isArray(commentsMap[postId]) : '없음');
+      
       if (commentsMap && commentsMap[postId] && Array.isArray(commentsMap[postId])) {
+        console.log(`[getPostComments] commentsMap[postId] 길이:`, commentsMap[postId].length);
         return commentsMap[postId].map(comment => {
           // content와 text 필드 간 호환성 처리
           if (comment.content && !comment.text) {
@@ -1029,9 +1042,10 @@ function CommunityContent() {
       }
       
       // 3. 해당되는 댓글이 없으면 빈 배열 반환
+      console.log(`[getPostComments] 댓글을 찾을 수 없어 기본값 반환`);
       return defaultComments;
     } catch (error) {
-      console.error('댓글 정보 가져오기 오류:', error);
+      console.error('[getPostComments] 댓글 정보 가져오기 오류:', error);
       return defaultComments;
     }
   };

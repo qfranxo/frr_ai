@@ -17,46 +17,28 @@ export async function GET(req: NextRequest) {
 
     try {
       // 데이터베이스 연결 및 오류 처리 개선
-      // 1. 먼저 imageId가 유효한 UUID 형식인지 확인 (선택적)
+      console.log('[GET_COMMENTS] 데이터베이스 쿼리 시작...');
+      const data = await db
+        .select()
+        .from(comments)
+        .where(eq(comments.imageId, imageId))
+        .orderBy(comments.createdAt)
       
-      // 2. 데이터베이스 쿼리 개선 - try-catch로 감싸서 오류 처리
-      try {
-        const data = await db
-          .select()
-          .from(comments)
-          .where(eq(comments.imageId, imageId))
-          .orderBy(comments.createdAt)
-        
-        console.log(`[GET_COMMENTS] Found ${data.length} comments for imageId: ${imageId}`);
-        
-        return NextResponse.json({ 
-          success: true, 
-          data 
-        });
-      } catch (queryError) {
-        console.error('[GET_COMMENTS] 데이터베이스 쿼리 오류:', queryError);
-        
-        // 임시 대응책: 데이터베이스 연결 실패 시 빈 배열 반환 (프로덕션에서는 적절히 수정 필요)
-        return NextResponse.json({ 
-          success: true, 
-          data: [],
-          warning: '데이터베이스 연결에 문제가 있어 댓글을 가져올 수 없습니다.'
-        });
-      }
-    } catch (dbError) {
-      console.error('[GET_COMMENTS_DB_ERROR]', dbError);
+      console.log(`[GET_COMMENTS] Found ${data.length} comments for imageId: ${imageId}`);
+      console.log('[GET_COMMENTS] 댓글 데이터 샘플:', data.length > 0 ? data[0] : '데이터 없음');
       
-      // 데이터베이스 오류 디버깅을 위한 로그 추가
-      if (dbError instanceof Error) {
-        console.error(`Error details: ${dbError.message}`);
-        console.error(`Error stack: ${dbError.stack}`);
-      }
+      return NextResponse.json({ 
+        success: true, 
+        data 
+      });
+    } catch (queryError) {
+      console.error('[GET_COMMENTS] 데이터베이스 쿼리 오류:', queryError);
       
-      // 클라이언트에게 빈 응답 반환 (오류가 아닌 빈 데이터로 처리)
+      // 임시 대응책: 데이터베이스 연결 실패 시 빈 배열 반환 (프로덕션에서는 적절히 수정 필요)
       return NextResponse.json({ 
         success: true, 
         data: [],
-        warning: '데이터베이스 오류로 댓글을 가져올 수 없습니다.'
+        warning: '데이터베이스 연결에 문제가 있어 댓글을 가져올 수 없습니다.'
       });
     }
   } catch (err) {
