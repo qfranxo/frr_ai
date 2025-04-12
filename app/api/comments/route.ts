@@ -149,17 +149,17 @@ export async function POST(req: NextRequest) {
         .returning()
 
       console.log('[댓글 API] DB 저장 성공:', newComment.id);
+      console.log('[댓글 API] 저장된 댓글 데이터:', newComment);
       
       return NextResponse.json({ 
         success: true, 
         data: {
           id: newComment.id,
-          imageId: imageId,
-          userId: userId,
-          userName: userName,
-          text: text,
-          content: text,
-          author: userName,
+          imageId: newComment.imageId,
+          userId: newComment.userId,
+          userName: newComment.userName,
+          text: newComment.content,
+          content: newComment.content,
           createdAt: newComment.createdAt
         },
         message: '댓글이 추가되었습니다.'

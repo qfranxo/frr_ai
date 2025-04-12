@@ -1011,15 +1011,18 @@ function CommunityContent() {
       
       if (post?.comments && Array.isArray(post.comments)) {
         console.log(`[getPostComments] post.comments 길이:`, post.comments.length);
+        console.log(`[getPostComments] 첫 번째 댓글 데이터:`, post.comments.length > 0 ? post.comments[0] : '댓글 없음');
+        
         // 댓글 데이터 유효성 확인 및 content/text 필드 호환성 처리
         return post.comments.map(comment => {
+          const result = { ...comment };
           // content와 text 필드 간 호환성 처리
-          if (comment.content && !comment.text) {
-            comment.text = comment.content;
-          } else if (comment.text && !comment.content) {
-            comment.content = comment.text;
+          if (result.content && !result.text) {
+            result.text = result.content;
+          } else if (result.text && !result.content) {
+            result.content = result.text;
           }
-          return comment;
+          return result;
         });
       }
       
@@ -1030,14 +1033,17 @@ function CommunityContent() {
       
       if (commentsMap && commentsMap[postId] && Array.isArray(commentsMap[postId])) {
         console.log(`[getPostComments] commentsMap[postId] 길이:`, commentsMap[postId].length);
+        console.log(`[getPostComments] commentsMap 첫 번째 댓글:`, commentsMap[postId].length > 0 ? commentsMap[postId][0] : '댓글 없음');
+        
         return commentsMap[postId].map(comment => {
+          const result = { ...comment };
           // content와 text 필드 간 호환성 처리
-          if (comment.content && !comment.text) {
-            comment.text = comment.content;
-          } else if (comment.text && !comment.content) {
-            comment.content = comment.text;
+          if (result.content && !result.text) {
+            result.text = result.content;
+          } else if (result.text && !result.content) {
+            result.content = result.text;
           }
-          return comment;
+          return result;
         });
       }
       
@@ -1617,7 +1623,7 @@ function CommunityContent() {
                         {comment.createdAt ? formatDate(comment.createdAt) : 'No date'}
                       </span>
                     </div>
-                    <p className="text-xs sm:text-sm text-gray-600">{comment.text}</p>
+                    <p className="text-xs sm:text-sm text-gray-600">{comment.text || comment.content}</p>
                   </div>
                   
                   {/* 삭제 버튼 (자신의 댓글이거나 게시물 주인인 경우) */}

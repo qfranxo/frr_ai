@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       .orderBy(comments.createdAt)
     
     console.log(`[BATCH_COMMENTS] Query executed in ${(performance.now() - startTime).toFixed(2)}ms, found ${data.length} comments`)
+    console.log('[BATCH_COMMENTS] 첫 번째 댓글 데이터 샘플:', data.length > 0 ? data[0] : '데이터 없음')
     
     // O(n) 복잡도로 데이터 그룹화 - 더 효율적인 알고리즘
     const commentsByImage: Record<string, any[]> = {}
@@ -46,11 +47,15 @@ export async function POST(req: NextRequest) {
       commentsByImage[id] = []
     })
     
-    // 한 번의 순회로 데이터 채우기
+    // 한 번의 순회로 데이터 채우기 (필드 매핑 추가)
     data.forEach(comment => {
       const imageId = comment.imageId
       if (imageId && commentsByImage[imageId]) {
-        commentsByImage[imageId].push(comment)
+        // text 필드 추가 (content 값을 사용)
+        commentsByImage[imageId].push({
+          ...comment,
+          text: comment.content, // content 값을 text 필드로 복제
+        })
       }
     })
     
