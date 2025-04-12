@@ -24,7 +24,8 @@ function MyApp({ Component, pageProps }: AppProps) {
           colorTextOnPrimaryBackground: '#fff'
         }
       }}
-      redirectUrl="/"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
     >
       <AppContent Component={Component} pageProps={pageProps} />
     </ClerkProvider>

@@ -86,7 +86,6 @@ export default function RegisterPage() {
             routing="path"
             signInUrl="/auth/login"
             fallbackRedirectUrl="/"
-            redirectUrl="/"
           />
 
           <div className="w-[calc(100%-3rem)] mx-auto block mt-8">
