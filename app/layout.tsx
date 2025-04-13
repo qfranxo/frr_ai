@@ -45,8 +45,8 @@ export default function RootLayout({
       }}
       signInUrl="https://accounts.frrai.com/sign-in"
       signUpUrl="https://accounts.frrai.com/sign-up"
-      afterSignInUrl="https://frrai.com"
-      afterSignUpUrl="https://frrai.com"
+      signInFallbackRedirectUrl="https://frrai.com"
+      signUpFallbackRedirectUrl="https://frrai.com"
     >
       <html lang="ko" suppressHydrationWarning className={`${kodeMono.variable} ${rubikDoodleShadow.variable}`}>
         <head>
