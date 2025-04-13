@@ -13,6 +13,22 @@ export function generateEnhancedPrompt(prompt: string, options: IModelOptions): 
   // 기본 품질 향상 키워드 추가
   enhancedPrompt = addQualityEnhancements(enhancedPrompt);
   
+  // 얼굴 품질 향상 접미사 추가
+  const facialQualitySuffix = ", perfect face, detailed face, realistic facial features, symmetrical facial features, clear eyes, natural-looking face, high-definition facial details, flawless facial proportions, sharp facial features";
+  
+  // 추가 품질 향상 접미사
+  let qualitySuffix = ", best quality, highly detailed, ultra sharp, 4k, hd, masterpiece, professional, award winning";
+  
+  // 렌더링 스타일에 따른 추가 접미사
+  if (options.renderStyle?.toLowerCase() === 'anime' || options.style?.toLowerCase() === 'anime') {
+    qualitySuffix += ", best anime art, anime masterpiece, detailed anime style, anime key visual, anime cg";
+  } else if (options.renderStyle?.toLowerCase() === 'realistic' || options.style?.toLowerCase() === 'realistic' || !options.renderStyle) {
+    qualitySuffix += ", photorealistic, hyperrealistic, photographic, 8k photography, ultra-detailed" + facialQualitySuffix;
+  }
+  
+  // 최종 품질 향상 접미사 추가
+  enhancedPrompt += qualitySuffix;
+  
   return enhancedPrompt;
 }
 
@@ -101,24 +117,21 @@ export function addQualityEnhancements(prompt: string): string {
   return `${prompt}, high quality, photorealistic, professional photography`;
 }
 
-// 네거티브 프롬프트 생성 함수 추가
-export function generateNegativePrompt(renderStyle: string = 'realistic'): string {
-  // 기본 네거티브 프롬프트
-  let negativePrompt = "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, disconnected limbs, mutation, mutated, ugly, disgusting, amputation, blurry, blurred, watermark, text, poorly drawn face, poorly drawn hands";
-  
-  // 항상 포함될 눈 관련 네거티브 프롬프트
-  negativePrompt += ", solid black eyes, pure black eyes, completely black eyes, unnaturally dark eyes";
-  
-  // 렌더링 스타일에 따라 네거티브 프롬프트 조정
-  if (renderStyle === "anime") {
-    negativePrompt += ", realistic face, realistic skin, 3D rendering, photorealistic, realistic lighting, realism, photorealism, realistic texture, too realistic";
-  } else {
-    // 사실적 스타일에서는 눈 관련 네거티브 프롬프트 강화
-    negativePrompt += ", asymmetric eyes, unaligned eyes, crossed eyes, unrealistic eyes, cartoon eyes, anime eyes, weird eyes, disproportionate eyes, fake looking eyes, unnatural pupils, inconsistent eye color, different sized eyes, mismatched eye colors, uneven eyes, droopy eyes, googly eyes, wall-eyed, cross-eyed, strabismus, lazy eye, unfocused eyes, unrealistic iris, unrealistic pupil, artificial looking eyes";
-    
-    // 얼굴 집중 완화를 위한 네거티브 프롬프트
-    negativePrompt += ", extreme close-up, too close face shot, cropped body, partial body, disembodied";
+// 네거티브 프롬프트 생성 함수 - 얼굴 관련 부분 강화
+export function generateNegativePrompt(renderStyle?: string): string {
+  // 기본 네거티브 프롬프트 (모든 스타일에 공통 적용)
+  const baseNegativePrompt = "poorly drawn face, mutation, deformed, ugly, blurry, bad anatomy, bad proportions, extra limbs, cloned face, skinny, glitchy, double face, two heads, disfigured, malformed limbs, missing arms, missing legs, extra arms, extra legs, mutated hands, mutated feet, distorted face, asymmetric face, deformed eyes, crossed eyes, face blemishes, bad teeth, crooked teeth, misshapen jawline";
+
+  // 애니메이션 스타일인 경우 추가 네거티브 프롬프트
+  if (renderStyle?.toLowerCase() === 'anime' || renderStyle?.toLowerCase() === 'cartoon') {
+    return `${baseNegativePrompt}, bad-artist-anime, bad-image-v2-39000, bad_prompt_version2, worst quality, low quality, normal quality, lowres, low details, oversaturated, undersaturated, overexposed, underexposed, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, jpeg artifacts, signature, watermark, username, blurry, bad feet, multiple views, reference sheet, long body, multiple breasts, (mutated hands and fingers:1.5), (mutation, poorly drawn:1.2), (long body:1.3), poorly drawn, mutilated, tracing, traced, ugly, transition, mutated`;
   }
-  
-  return negativePrompt;
+
+  // 리얼리스틱 스타일인 경우 추가 네거티브 프롬프트 (얼굴 품질 강화)
+  if (renderStyle?.toLowerCase() === 'realistic' || !renderStyle) {
+    return `${baseNegativePrompt}, deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime, mutated hands and fingers, floating limbs, disconnected limbs, malformed hands, blurry, badly drawn face, distorted face, poorly drawn face, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, out of focus, long neck, long body, asymmetrical eyes, weird eyes, crooked eyes, closed eyes, inaccurate eyes, bad eyes, mutated lips, bad lips, weird lips, bad teeth, poor teeth, poor facial structure, distorted facial features, poor jawline`;
+  }
+
+  // 기본 네거티브 프롬프트 반환
+  return baseNegativePrompt;
 } 
