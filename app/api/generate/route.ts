@@ -18,7 +18,7 @@ import { generateEnhancedPrompt, generateNegativePrompt } from "@/utils/prompt";
 
 
 // Vercel 서버리스 함수의 실행 시간 제한 설정 (60초)
-export const maxDuration = 60;
+export const maxDuration = 30;
 // 실제 Clerk의 auth 헬퍼 사용
 // function auth() {
 //   const headersList = headers();

@@ -620,15 +620,15 @@ export function ImageCard({
       {variant === 'community' && (
         <div className="px-4 sm:px-5 pb-3 sm:pb-4 mt-1">
           {Array.isArray(comments) && comments.length > 0 ? (
-            <div className="max-h-24 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-200">
+            <div className="max-h-24 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-200">
               <div className="space-y-2 py-2">
                 {comments.slice(0, 2).map((comment, index) => (
-                  <div key={comment.id || `temp-${Date.now()}-${index}`} className="flex flex-col">
-                    <div className="flex items-start gap-1.5">
+                  <div key={comment.id || `temp-${Date.now()}-${index}`} className="flex flex-col w-full">
+                    <div className="flex items-start gap-1.5 w-full">
                       <span className="text-xs sm:text-sm font-medium truncate">
                         {getCommentAuthorName(comment.userName || comment.author, currentUser)}:
                       </span>
-                      <span className="text-xs sm:text-sm text-gray-600 break-words flex-1">
+                      <span className="text-xs sm:text-sm text-gray-600 break-words line-clamp-2 flex-1 overflow-hidden">
                         {comment.text}
                       </span>
                     </div>
@@ -659,7 +659,11 @@ export function ImageCard({
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onComment(post.id);
+                      if (isSignedIn) {
+                        setCommentModalState({ isOpen: true });
+                      } else {
+                        onComment(post.id);
+                      }
                     }}
                     className="text-[10px] sm:text-xs text-gray-500 hover:text-blue-600 font-medium py-1.5 px-3 w-full"
                   >

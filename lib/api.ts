@@ -373,8 +373,8 @@ export const communityApi = {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       logCommentCache('오프라인 상태, 캐시된 댓글 반환');
       // 오프라인 상태일 때 캐시에서 가져오기
-      if (typeof sessionStorage !== 'undefined') {
-        const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
+      if (typeof localStorage !== 'undefined') {
+        const cachedComments = localStorage.getItem(`comments_${imageId}`);
         if (cachedComments) {
           return JSON.parse(cachedComments);
         }
@@ -383,35 +383,39 @@ export const communityApi = {
     }
 
     try {
-      // 먼저 캐시 확인
-      if (typeof sessionStorage !== 'undefined') {
-        const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
-        
-        if (cachedComments) {
-          const parsed = JSON.parse(cachedComments);
-          logCommentCache(`캐시에서 ${parsed.length}개의 댓글 로드`, imageId);
-          
-          // 백그라운드에서 캐시 갱신 (응답을 기다리지 않음)
-          this._updateCommentsCache(imageId).catch((err: Error) => {
-            localLogError('백그라운드 댓글 캐시 갱신 실패:', err);
-          });
-          
-          return parsed;
-        }
-      }
-      
-      logCommentCache('캐시 없음, API에서 댓글 로드', imageId);
+      // API에서 댓글 바로 가져오기 (캐시 확인 우선순위 낮춤)
+      logCommentCache('API에서 댓글 로드', imageId);
       const response: ApiResponse<Comment[]> = await apiRequest(`/api/comments?imageId=${imageId}`, {
-        method: 'GET'
+        method: 'GET',
+        cache: 'no-store'
       });
       
       if (response.success && response.data) {
         // 캐시에 저장
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.setItem(`comments_${imageId}`, JSON.stringify(response.data));
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`comments_${imageId}`, JSON.stringify(response.data));
+          localStorage.setItem(`comments_timestamp_${imageId}`, Date.now().toString());
           logCommentCache(`${response.data.length}개의 댓글 캐싱됨`, imageId);
         }
         return response.data;
+      }
+      
+      // API 실패 시에만 캐시 확인
+      if (typeof localStorage !== 'undefined') {
+        const cachedComments = localStorage.getItem(`comments_${imageId}`);
+        const cachedTimestamp = localStorage.getItem(`comments_timestamp_${imageId}`);
+        
+        if (cachedComments && cachedTimestamp) {
+          const timestamp = parseInt(cachedTimestamp, 10);
+          const now = Date.now();
+          
+          // 최대 1분만 유효한 캐시 사용 (이전 5분)
+          if (now - timestamp < 60 * 1000) {
+            const parsed = JSON.parse(cachedComments);
+            logCommentCache(`캐시에서 ${parsed.length}개의 댓글 로드`, imageId);
+            return parsed;
+          }
+        }
       }
       
       return [];
@@ -419,8 +423,8 @@ export const communityApi = {
       logError('댓글 로드 중 오류:', error);
       
       // 오류 발생 시 캐시 확인
-      if (typeof sessionStorage !== 'undefined') {
-        const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
+      if (typeof localStorage !== 'undefined') {
+        const cachedComments = localStorage.getItem(`comments_${imageId}`);
         if (cachedComments) {
           logCommentCache('API 요청 실패, 캐시된 댓글 사용', imageId);
           return JSON.parse(cachedComments);
@@ -436,11 +440,13 @@ export const communityApi = {
     try {
       logCommentCache('백그라운드에서 댓글 캐시 갱신 중', imageId);
       const response: ApiResponse<Comment[]> = await apiRequest(`/api/comments?imageId=${imageId}`, {
-        method: 'GET'
+        method: 'GET',
+        cache: 'no-store'
       });
       
-      if (response.success && response.data && typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem(`comments_${imageId}`, JSON.stringify(response.data));
+      if (response.success && response.data && typeof localStorage !== 'undefined') {
+        localStorage.setItem(`comments_${imageId}`, JSON.stringify(response.data));
+        localStorage.setItem(`comments_timestamp_${imageId}`, Date.now().toString());
         logCommentCache(`백그라운드에서 ${response.data.length}개의 댓글 캐시 갱신 완료`, imageId);
       }
     } catch (error) {
@@ -458,9 +464,9 @@ export const communityApi = {
       logCommentCache('오프라인 상태, 캐시된 배치 댓글 반환');
       // 오프라인 상태일 때 캐시에서 가져오기
       const result: Record<string, Comment[]> = {};
-      if (typeof sessionStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
         for (const imageId of imageIds) {
-          const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
+          const cachedComments = localStorage.getItem(`comments_${imageId}`);
           if (cachedComments) {
             result[imageId] = JSON.parse(cachedComments);
           } else {
@@ -472,48 +478,43 @@ export const communityApi = {
     }
 
     try {
-      // 먼저 모든 이미지에 대해 캐시 확인
+      // API에서 모든 댓글을 일괄로 가져오기
+      const queryString = imageIds.map(id => `imageIds=${encodeURIComponent(id)}`).join('&');
+      const response: ApiResponse<Record<string, Comment[]>> = await apiRequest(`/api/comments/batch?${queryString}`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      
       const result: Record<string, Comment[]> = {};
-      const missingImageIds: string[] = [];
-
-      if (typeof sessionStorage !== 'undefined') {
-        for (const imageId of imageIds) {
-          const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
-          if (cachedComments) {
-            result[imageId] = JSON.parse(cachedComments);
-          } else {
-            missingImageIds.push(imageId);
-          }
+      
+      if (response.success && response.data && typeof localStorage !== 'undefined') {
+        // 각 이미지별로 결과 처리 및 캐시 저장
+        for (const [imageId, comments] of Object.entries(response.data)) {
+          result[imageId] = comments as Comment[];
+          localStorage.setItem(`comments_${imageId}`, JSON.stringify(comments));
+          localStorage.setItem(`comments_timestamp_${imageId}`, Date.now().toString());
+          logCommentCache(`${(comments as Comment[]).length}개의 댓글 캐싱됨`, imageId);
         }
       } else {
-        // sessionStorage를 사용할 수 없는 경우 모든 이미지가 누락된 것으로 처리
-        imageIds.forEach(id => missingImageIds.push(id));
-      }
-
-      // 캐시에 없는 이미지에 대해서만 API 요청
-      if (missingImageIds.length > 0) {
-        logCommentCache(`${missingImageIds.length}개 이미지에 대한 댓글 배치 로드`);
-        
-        const queryString = missingImageIds.map(id => `imageIds=${encodeURIComponent(id)}`).join('&');
-        const response: ApiResponse<Record<string, Comment[]>> = await apiRequest(`/api/comments/batch?${queryString}`, {
-          method: 'GET'
-        });
-        
-        if (response.success && response.data && typeof sessionStorage !== 'undefined') {
-          // 각 이미지별로 결과 합치기 및 캐시 저장
-          for (const [imageId, comments] of Object.entries(response.data)) {
-            result[imageId] = comments as Comment[];
-            sessionStorage.setItem(`comments_${imageId}`, JSON.stringify(comments));
-            logCommentCache(`${(comments as Comment[]).length}개의 댓글 캐싱됨`, imageId);
+        // API 실패 시에만 캐시 확인
+        if (typeof localStorage !== 'undefined') {
+          for (const imageId of imageIds) {
+            const cachedComments = localStorage.getItem(`comments_${imageId}`);
+            const cachedTimestamp = localStorage.getItem(`comments_timestamp_${imageId}`);
+            
+            if (cachedComments && cachedTimestamp) {
+              const timestamp = parseInt(cachedTimestamp, 10);
+              const now = Date.now();
+              
+              // 최대 1분만 유효한 캐시 사용
+              if (now - timestamp < 60 * 1000) {
+                result[imageId] = JSON.parse(cachedComments);
+              }
+            } else {
+              result[imageId] = [];
+            }
           }
         }
-      } else {
-        logCommentCache('모든 이미지의 댓글이 캐시에서 로드됨');
-        
-        // 백그라운드에서 캐시 갱신 (최신 댓글 가져오기)
-        this._updateCommentsBatchCache(imageIds).catch((err: Error) => {
-          localLogError('백그라운드 배치 댓글 캐시 갱신 실패:', err);
-        });
       }
       
       return result;
@@ -522,9 +523,9 @@ export const communityApi = {
       
       // 오류 발생 시 캐시 확인
       const result: Record<string, Comment[]> = {};
-      if (typeof sessionStorage !== 'undefined') {
+      if (typeof localStorage !== 'undefined') {
         for (const imageId of imageIds) {
-          const cachedComments = sessionStorage.getItem(`comments_${imageId}`);
+          const cachedComments = localStorage.getItem(`comments_${imageId}`);
           if (cachedComments) {
             result[imageId] = JSON.parse(cachedComments);
           } else {
@@ -534,26 +535,6 @@ export const communityApi = {
       }
       
       return result;
-    }
-  },
-  
-  // 배치 캐시 업데이트를 위한 내부 메서드
-  async _updateCommentsBatchCache(imageIds: string[]): Promise<void> {
-    try {
-      logCommentCache('백그라운드에서 배치 댓글 캐시 갱신 중');
-      const queryString = imageIds.map(id => `imageIds=${encodeURIComponent(id)}`).join('&');
-      const response: ApiResponse<Record<string, Comment[]>> = await apiRequest(`/api/comments/batch?${queryString}`, {
-        method: 'GET'
-      });
-      
-      if (response.success && response.data && typeof sessionStorage !== 'undefined') {
-        for (const [imageId, comments] of Object.entries(response.data)) {
-          sessionStorage.setItem(`comments_${imageId}`, JSON.stringify(comments));
-        }
-        logCommentCache('백그라운드에서 배치 댓글 캐시 갱신 완료');
-      }
-    } catch (error) {
-      localLogError('배치 댓글 캐시 갱신 실패:', error);
     }
   },
   

@@ -285,7 +285,7 @@ export const PostCard = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden w-full">
       {/* 이미지 컨테이너 */}
       <div className={`relative ${post.aspectRatio === '9:16' ? 'aspect-[9/16]' : post.aspectRatio === '16:9' ? 'aspect-[16/9]' : 'aspect-[3/4]'} w-full`}>
         <Image
@@ -364,7 +364,7 @@ export const PostCard = ({
             {currentComments.length > 1 && (
               <button
                 onClick={() => setCommentModalState({ isOpen: true })}
-                className="text-[10px] sm:text-sm text-blue-500 hover:text-blue-600 font-medium mt-2 sm:mt-4 transition-colors"
+                className="text-[10px] sm:text-sm text-blue-500 hover:text-blue-600 font-medium mt-2 sm:mt-4 transition-colors cursor-pointer"
               >
                 View {currentComments.length - 1} more comments
               </button>

@@ -16,8 +16,15 @@ export const metadata = {
   title: "Frr AI",
   description: "AI 모델로 나를 만들어보세요",
   icons: {
-    icon: '/favicon.ico',
-    apple: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' }
+    ],
+    apple: [
+      { url: '/favicon.ico' }
+    ],
+    shortcut: [
+      { url: '/favicon.ico' }
+    ]
   },
 };
 
@@ -45,6 +52,9 @@ export default function RootLayout({
         <head>
           {/* Favicon 추가 */}
           <link rel="icon" href="/favicon.ico" sizes="any" />
+          <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+          <link rel="apple-touch-icon" href="/icon.png" />
+          <link rel="icon" type="image/png" sizes="32x32" href="/icon.png" />
           
           {/* Font Awesome 추가 */}
           <link

@@ -278,6 +278,184 @@ export const useComments = (
     setCommentText(text);
   }, []);
 
+  // 댓글 목록 강제 새로고침 (필요한 경우 외부에서 호출)
+  const refreshComments = useCallback(async (postId: string) => {
+    try {
+      // 먼저 localStorage에서 캐시된 데이터 확인
+      if (typeof localStorage !== 'undefined') {
+        const cachedComments = localStorage.getItem(`comments_${postId}`);
+        const cachedTimestamp = localStorage.getItem(`comments_timestamp_${postId}`);
+        
+        if (cachedComments && cachedTimestamp) {
+          const timestamp = parseInt(cachedTimestamp, 10);
+          const now = Date.now();
+          
+          // 최근 캐시된 데이터가 있으면 먼저 그것을 사용 (5초 이내)
+          if (now - timestamp < 5 * 1000) {
+            try {
+              const parsedComments = JSON.parse(cachedComments);
+              if (Array.isArray(parsedComments) && parsedComments.length > 0) {
+                // 캐시된 데이터를 사용하여 즉시 UI 업데이트
+                const comments = parsedComments.map((item: any): Comment => ({
+                  id: item.id,
+                  text: item.text || item.content || '',
+                  author: item.userName || item.author || 'Unknown',
+                  createdAt: item.createdAt || new Date().toISOString(),
+                  userId: item.userId || '',
+                  userName: item.userName || item.author || 'Unknown',
+                  imageId: item.imageId || postId,
+                  // 선택적 필드
+                  ...(item.content && { content: item.content })
+                }));
+                
+                // 전역 상태 업데이트
+                setGlobalComment(postId, comments);
+                setCommentsMap(prev => ({...prev, [postId]: comments}));
+                
+                // 백그라운드에서 API 호출 시작 (결과 대기하지 않음)
+                setTimeout(() => {
+                  fetch(`/api/comments?imageId=${postId}&t=${Date.now()}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: {
+                      'Cache-Control': 'no-cache, no-store, must-revalidate',
+                      'Pragma': 'no-cache',
+                      'Expires': '0'
+                    }
+                  }).then(response => {
+                    if (response.ok) return response.json();
+                    throw new Error('댓글 가져오기 실패');
+                  }).then(result => {
+                    if (result.success && result.data) {
+                      // API 응답 데이터로 상태 업데이트
+                      const apiComments = result.data.map((item: any): Comment => ({
+                        id: item.id,
+                        text: item.text || item.content || '',
+                        author: item.userName || item.author || 'Unknown',
+                        createdAt: item.createdAt || new Date().toISOString(),
+                        userId: item.userId || '',
+                        userName: item.userName || item.author || 'Unknown',
+                        imageId: item.imageId || postId,
+                        ...(item.content && { content: item.content })
+                      }));
+                      
+                      setGlobalComment(postId, apiComments);
+                      setCommentsMap(prev => ({...prev, [postId]: apiComments}));
+                      
+                      // 캐시 업데이트
+                      localStorage.setItem(`comments_${postId}`, JSON.stringify(apiComments));
+                      localStorage.setItem(`comments_timestamp_${postId}`, Date.now().toString());
+                    }
+                  }).catch(error => {
+                    console.error('백그라운드 댓글 갱신 중 오류:', error);
+                  });
+                }, 50);
+                
+                return true;
+              }
+            } catch (parseError) {
+              console.error('캐시 파싱 오류:', parseError);
+            }
+          }
+        }
+      }
+      
+      // 캐시된 데이터가 없거나 오래된 경우 직접 API 호출
+      const MAX_RETRIES = 2;
+      let retryCount = 0;
+      let success = false;
+      
+      while (retryCount <= MAX_RETRIES && !success) {
+        try {
+          // 댓글 API에 cache: 'no-store' 옵션 사용하도록 수정
+          const response = await fetch(`/api/comments?imageId=${postId}&t=${Date.now()}`, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error('댓글 가져오기 실패');
+          }
+          
+          const result = await response.json();
+          
+          if (result.success && result.data) {
+            // API 응답 데이터를 필요한 형식으로 변환
+            const comments = result.data.map((item: any): Comment => ({
+              id: item.id,
+              text: item.text || item.content || '',
+              author: item.userName || item.author || 'Unknown',
+              createdAt: item.createdAt || new Date().toISOString(),
+              userId: item.userId || '',
+              userName: item.userName || item.author || 'Unknown',
+              imageId: item.imageId || postId,
+              // 선택적 필드
+              ...(item.content && { content: item.content })
+            }));
+            
+            // 전역 상태 업데이트
+            setGlobalComment(postId, comments);
+            setCommentsMap(prev => ({...prev, [postId]: comments}));
+            
+            // localStorage 업데이트
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(`comments_${postId}`, JSON.stringify(comments));
+              localStorage.setItem(`comments_timestamp_${postId}`, Date.now().toString());
+            }
+            
+            success = true;
+            return true;
+          }
+        } catch (error) {
+          retryCount++;
+          if (retryCount > MAX_RETRIES) {
+            // 모든 재시도 실패 시 communityApi 사용
+            try {
+              // API에서 반환된 댓글 가져오기
+              const apiComments = await communityApi.loadCommentsForImage(postId);
+              
+              if (apiComments && Array.isArray(apiComments)) {
+                // 타입 변환 함수
+                const normalizeComment = (item: any): Comment => ({
+                  id: item.id,
+                  text: item.text || item.content || '',
+                  author: item.userName || item.author || 'Unknown',
+                  createdAt: item.createdAt || new Date().toISOString(),
+                  userId: item.userId || '',
+                  userName: item.userName || item.author || 'Unknown',
+                  imageId: item.imageId || postId,
+                  // 선택적 필드
+                  ...(item.content && { content: item.content })
+                });
+                
+                const comments = apiComments.map(normalizeComment);
+                setGlobalComment(postId, comments);
+                setCommentsMap(prev => ({...prev, [postId]: comments}));
+                return true;
+              }
+            } catch (apiError) {
+              console.error('API 호출 오류:', apiError);
+            }
+            return false;
+          }
+          
+          // 잠시 대기 후 재시도
+          await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
+        }
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('댓글 새로고침 중 오류:', error);
+      return false;
+    }
+  }, [setGlobalComment]);
+
   const handleComment = useCallback(async (postId: number | string, text: string) => {
     if (!isUserLoggedIn || !currentUser) {
       showToast('error', 'Login required to add a comment');
@@ -401,6 +579,16 @@ export const useComments = (
       // 성공 메시지
       showToast('success', 'Comment added successfully');
       
+      // 비동기적으로 새로고침 - 우선 낙관적 업데이트를 유지
+      setTimeout(() => {
+        // 새로운 댓글을 즉시 보이게 하기 위해 새로고침 요청
+        refreshComments(id).catch(err => {
+          if (debugRef.current) {
+            console.error('새로고침 중 오류:', err);
+          }
+        });
+      }, 500);
+      
       return commentData; // 성공 시 댓글 데이터 반환
     } catch (error) {
       if (debugRef.current) {
@@ -413,7 +601,7 @@ export const useComments = (
     } finally {
       setIsSubmitting(false);
     }
-  }, [currentUser, isUserLoggedIn, showToast, isSubmitting, getGlobalComments, setGlobalComment]);
+  }, [currentUser, isUserLoggedIn, showToast, isSubmitting, getGlobalComments, setGlobalComment, refreshComments]);
 
   const submitComment = useCallback(() => {
     if (selectedPostId && commentText.trim() && !isSubmitting) {
@@ -497,22 +685,6 @@ export const useComments = (
       return false;
     }
   }, [currentUser, isUserLoggedIn, showToast, getGlobalComments, setGlobalComment]);
-
-  // 댓글 목록 강제 새로고침 (필요한 경우 외부에서 호출)
-  const refreshComments = useCallback(async (postId: string) => {
-    try {
-      const response = await communityApi.loadCommentsForImage(postId);
-      if (response.success && response.data) {
-        const comments = response.data;
-        setGlobalComment(postId, comments);
-        setCommentsMap(prev => ({...prev, [postId]: comments}));
-        return true;
-      }
-      return false;
-    } catch (error) {
-      return false;
-    }
-  }, [setGlobalComment]);
 
   return {
     commentsMap,
