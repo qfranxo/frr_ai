@@ -107,7 +107,8 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
                   
       const maxGenerations = 
         tier === 'premium' ? 50 : 
-        tier === 'starter' ? 2 : 0;
+        tier === 'starter' ? 2 : 
+        tier === 'free' ? 2 : 2; // 기본 값도 2로 통일 (모든 경우 최소 2회 제공)
       
       const supabaseSubscription: SubscriptionInfo = {
         tier: tier,
@@ -134,7 +135,8 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
       const subscriptionInfo: SubscriptionInfo = {
         tier: metadata.subscriptionTier,
         maxGenerations: metadata.subscriptionTier === 'premium' ? 50 : 
-                        metadata.subscriptionTier === 'starter' ? 2 : 0,
+                        metadata.subscriptionTier === 'starter' ? 2 : 
+                        metadata.subscriptionTier === 'free' ? 2 : 2, // 기본 값도 2로 통일
         renewalDate: new Date(metadata.subscriptionRenewalDate || getNextMonthDate())
       };
       usersSubscriptions.set(userId, subscriptionInfo);
@@ -167,7 +169,7 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
     }
 
     // 모든 로그인한 사용자에게 자동으로 스타터 플랜 부여
-    console.log(`Assigning starter plan to new user: ***마스킹됨***`);
+    console.log(`Assigning starter plan to new user: ${userId.substring(0, 3)}***`);
     
     // Create default starter subscription
     const defaultSubscription: SubscriptionInfo = {
@@ -227,26 +229,53 @@ export async function getUserSubscription(userId: string): Promise<SubscriptionI
  * Get user's usage information
  */
 export async function getUserUsage(userId: string): Promise<UsageInfo> {
+  // 먼저 Supabase에서 구독 정보 조회 (사용량이 여기에 저장됨)
+  try {
+    const { data: subscriptionData, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (!error && subscriptionData) {
+      // 최신 DB 정보를 기반으로 사용량 반환
+      const usageCount = subscriptionData.usage_count || 0;
+      
+      // DB 사용량 기반으로 메모리 캐시 업데이트 (동기화)
+      if (usersUsage.has(userId)) {
+        const existingUsage = usersUsage.get(userId)!;
+        existingUsage.generationsThisMonth = usageCount;
+        existingUsage.lastGenerationDate = new Date();
+        usersUsage.set(userId, existingUsage);
+        saveToStorage();
+      } else {
+        // 신규 사용량 정보 생성
+        const newUsage: UsageInfo = {
+          userId,
+          generationsThisMonth: usageCount,
+          lastGenerationDate: new Date(),
+          monthStartDate: new Date(subscriptionData.last_reset_at || new Date())
+        };
+        usersUsage.set(userId, newUsage);
+        saveToStorage();
+      }
+      
+      // DB의 사용량 정보 기반 반환
+      return {
+        userId,
+        generationsThisMonth: usageCount,
+        lastGenerationDate: new Date(),
+        monthStartDate: new Date(subscriptionData.last_reset_at || new Date())
+      };
+    }
+  } catch (error) {
+    console.error('Supabase 구독 정보 조회 중 오류:', error);
+    // 오류 발생 시 메모리 기반 정보 사용
+  }
+
   // Check if already cached
   if (usersUsage.has(userId)) {
-    const usage = usersUsage.get(userId)!;
-    
-    // Check if data is for current month
-    const today = new Date();
-    if (today.getMonth() !== usage.monthStartDate.getMonth() || 
-        today.getFullYear() !== usage.monthStartDate.getFullYear()) {
-      // Reset usage for new month
-      const newUsage: UsageInfo = {
-        userId,
-        generationsThisMonth: 0,
-        lastGenerationDate: today,
-        monthStartDate: today
-      };
-      usersUsage.set(userId, newUsage);
-      return newUsage;
-    }
-    
-    return usage;
+    return usersUsage.get(userId)!;
   }
 
   // Create default usage info
@@ -264,18 +293,16 @@ export async function getUserUsage(userId: string): Promise<UsageInfo> {
  * Increment user's generation count
  */
 export async function incrementUserGenerations(userId: string): Promise<UsageInfo> {
-  // 기존 메모리 기반 사용량 업데이트 유지 (하위 호환성)
-  const usage = await getUserUsage(userId);
-  const updatedUsage: UsageInfo = {
-    ...usage,
-    generationsThisMonth: usage.generationsThisMonth + 1,
-    lastGenerationDate: new Date(),
-  };
-  usersUsage.set(userId, updatedUsage);
+  // 사용 가능 여부 확인 - 사용할 수 없는 상태면 증가시키지 않음
+  const { canGenerate, remaining } = await canUserGenerate(userId);
+  if (!canGenerate) {
+    console.log(`사용자 ${userId.substring(0, 3)}***는 사용량 제한에 도달했습니다. 증가를 허용하지 않습니다.`);
+    const usage = await getUserUsage(userId);
+    return usage; // 사용량 증가 없이 현재 사용량 반환
+  }
   
-  // Supabase subscriptions 테이블 업데이트 추가
   try {
-    // 먼저 사용자의 구독 정보 조회
+    // 먼저 Supabase에서 최신 구독 정보 조회
     const { data: subscriptionData, error: fetchError } = await supabase
       .from('subscriptions')
       .select('*')
@@ -286,11 +313,29 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
       console.error('구독 정보 조회 실패:', fetchError);
       // 실패해도 계속 진행 (메모리 기반 정보 반환)
     } else if (subscriptionData) {
+      // 구독 계획 정보와 최대 생성 가능 횟수 가져오기
+      const tier = subscriptionData.plan || 'starter';
+      const maxGenerations = 
+        tier === 'premium' ? 50 : 
+        tier === 'starter' ? 2 : 0;
+      
+      // 현재 사용량
+      const usageCount = subscriptionData.usage_count || 0;
+      
+      // 최대 사용량을 초과하지 않는지 다시 한번 확인
+      if (usageCount >= maxGenerations) {
+        console.log(`사용자 ${userId.substring(0, 3)}***는 이미 최대 사용량(${maxGenerations})에 도달했습니다.`);
+        
+        // 메모리 캐시 동기화
+        const usage = await getUserUsage(userId);
+        return usage;
+      }
+      
       // 구독 정보가 있으면 usage_count 증가
       const { error: updateError } = await supabase
         .from('subscriptions')
         .update({ 
-          usage_count: (subscriptionData.usage_count || 0) + 1,
+          usage_count: usageCount + 1,
           // last_reset_at은 변경하지 않음 (리셋 로직과 분리)
         })
         .eq('id', subscriptionData.id);
@@ -298,14 +343,27 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
       if (updateError) {
         console.error('구독 사용량 업데이트 실패:', updateError);
       } else {
-        console.log(`사용자 ***마스킹됨***의 구독 사용량이 ${(subscriptionData.usage_count || 0) + 1}로 업데이트됨`);
+        console.log(`사용자 ${userId.substring(0, 3)}***의 구독 사용량이 ${usageCount + 1}로 업데이트됨`);
+        
+        // DB 성공적으로 업데이트 됐을 때만 메모리 캐시 업데이트
+        // 기존 메모리 기반 사용량 업데이트 (하위 호환성)
+        const usage = await getUserUsage(userId);
+        const updatedUsage: UsageInfo = {
+          ...usage,
+          generationsThisMonth: usageCount + 1, // DB에서 업데이트된 값과 동기화
+          lastGenerationDate: new Date(),
+        };
+        usersUsage.set(userId, updatedUsage);
+        saveToStorage();
+        
+        return updatedUsage;
       }
     } else {
       // 구독 정보가 없으면 신규 생성 (새 사용자)
       const subscription = await getUserSubscription(userId);
       const tierValue = subscription?.tier || 'starter';
       
-      const { error: insertError } = await supabase
+      const { error: insertError, data: newSubscription } = await supabase
         .from('subscriptions')
         .insert({
           user_id: userId,
@@ -319,18 +377,42 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
           auto_renew: true,
           cancelled: false,
           refunded: false
-        });
+        })
+        .select()
+        .single();
       
       if (insertError) {
         console.error('신규 구독 생성 실패:', insertError);
       } else {
-        console.log(`사용자 ***마스킹됨***의 신규 구독 생성 완료 (사용량: 1)`);
+        console.log(`사용자 ${userId.substring(0, 3)}***의 신규 구독 생성 완료 (사용량: 1)`);
+        
+        // 새 구독이 생성되었을 때 메모리 캐시 업데이트
+        const updatedUsage: UsageInfo = {
+          userId,
+          generationsThisMonth: 1,
+          lastGenerationDate: new Date(),
+          monthStartDate: new Date()
+        };
+        usersUsage.set(userId, updatedUsage);
+        saveToStorage();
+        
+        return updatedUsage;
       }
     }
   } catch (dbError) {
     console.error('Supabase 구독 업데이트 중 오류:', dbError);
     // DB 업데이트 실패해도 메모리 기반 정보는 반환
   }
+  
+  // 기존 메모리 기반 사용량 업데이트 (하위 호환성) - DB 업데이트 실패 시에만 실행
+  const usage = await getUserUsage(userId);
+  const updatedUsage: UsageInfo = {
+    ...usage,
+    generationsThisMonth: usage.generationsThisMonth + 1,
+    lastGenerationDate: new Date(),
+  };
+  usersUsage.set(userId, updatedUsage);
+  saveToStorage();
   
   return updatedUsage;
 }
@@ -340,11 +422,7 @@ export async function incrementUserGenerations(userId: string): Promise<UsageInf
  * @returns Whether user can generate and remaining generations
  */
 export async function canUserGenerate(userId: string): Promise<{canGenerate: boolean, remaining: number}> {
-  // 메모리 기반 구독 & 사용량 정보 가져오기 (기존 로직)
-  const subscription = await getUserSubscription(userId);
-  const usage = await getUserUsage(userId);
-  
-  // Supabase에서 최신 사용량 확인
+  // Supabase에서 최신 사용량 확인 (DB를 최우선으로 사용)
   try {
     const { data: subscriptionData, error } = await supabase
       .from('subscriptions')
@@ -353,17 +431,38 @@ export async function canUserGenerate(userId: string): Promise<{canGenerate: boo
       .single();
     
     if (!error && subscriptionData) {
-      // Supabase 데이터가 있으면 이를 기준으로 사용 가능 여부 결정
-      const supabaseUsageCount = subscriptionData.usage_count || 0;
-      const tier = subscriptionData.plan || 'starter';
+      // 구독이 활성화되어 있는지 확인
+      if (!subscriptionData.is_active) {
+        console.log(`사용자 ${userId.substring(0, 3)}***의 구독이 비활성화 상태입니다.`);
+        return {
+          canGenerate: false,
+          remaining: 0
+        };
+      }
       
-      // 각 티어별 최대 생성 가능 횟수
+      // 각 티어별 최대 생성 가능 횟수 - 스타터와 무료 플랜은 2회로 제한, 프리미엄은 50회
+      const tier = subscriptionData.plan || 'starter';
       const maxGenerations = 
         tier === 'premium' ? 50 : 
-        tier === 'starter' ? 2 : 0;
+        tier === 'starter' ? 2 : 
+        tier === 'free' ? 2 : 2; // 기본값도 2로 설정
+      
+      // 현재 사용량
+      const usageCount = subscriptionData.usage_count || 0;
       
       // 남은 생성 횟수 계산
-      const remaining = Math.max(0, maxGenerations - supabaseUsageCount);
+      const remaining = Math.max(0, maxGenerations - usageCount);
+      
+      // 메모리 캐시 동기화 (선택사항)
+      if (usersUsage.has(userId)) {
+        const existingUsage = usersUsage.get(userId)!;
+        existingUsage.generationsThisMonth = usageCount;
+        usersUsage.set(userId, existingUsage);
+        saveToStorage();
+      }
+      
+      // 디버그 로그 - 현재 사용량과 남은 생성 횟수 표시
+      console.log(`사용자 ${userId.substring(0, 3)}***의 현재 구독 정보: 플랜=${tier}, 사용량=${usageCount}/${maxGenerations}, 남은횟수=${remaining}`);
       
       return {
         canGenerate: remaining > 0,
@@ -375,8 +474,22 @@ export async function canUserGenerate(userId: string): Promise<{canGenerate: boo
     // DB 조회 실패시 메모리 기반 정보 사용
   }
   
+  // 메모리 기반 구독 & 사용량 정보 가져오기 (DB 조회 실패 시 폴백)
+  const subscription = await getUserSubscription(userId);
+  const usage = await getUserUsage(userId);
+  
+  // 정확한 최대 생성 가능 횟수 계산
+  const maxGenerations = 
+    subscription.tier === 'premium' ? 50 : 
+    subscription.tier === 'starter' ? 2 : 
+    subscription.tier === 'free' ? 2 : 2; // 기본값도 2로 설정
+  
   // Supabase 조회 실패 시 기존 메모리 기반 로직 사용 (폴백)
-  const remaining = subscription.maxGenerations - usage.generationsThisMonth;
+  const remaining = Math.max(0, maxGenerations - usage.generationsThisMonth);
+  
+  // 디버그 로그 - 메모리 캐시 기반 정보 표시
+  console.log(`사용자 ${userId.substring(0, 3)}***의 메모리 캐시 정보: 플랜=${subscription.tier}, 사용량=${usage.generationsThisMonth}/${maxGenerations}, 남은횟수=${remaining}`);
+  
   return {
     canGenerate: remaining > 0,
     remaining

@@ -16,6 +16,9 @@ import { supabase } from "@/lib/supabase";
 import { isReplicateUrl, isValidImageUrl } from "@/utils/image-utils";
 import { generateEnhancedPrompt, generateNegativePrompt } from "@/utils/prompt";
 
+// Vercel 서버리스 함수의 실행 시간 제한 설정 (20초)
+export const maxDuration = 30;
+
 // 실제 Clerk의 auth 헬퍼 사용
 // function auth() {
 //   const headersList = headers();
@@ -191,67 +194,53 @@ function getAspectRatioFromRequest(ratio: string | undefined, finalSize: string 
 }
 
 export async function POST(request: Request) {
-  // 디버깅을 위한 API 토큰 확인
-  const apiToken = process.env.REPLICATE_API_TOKEN;
-  console.log("REPLICATE_API_TOKEN 존재 여부:", !!apiToken);
-  
-  if (!apiToken) {
-    return NextResponse.json(
-      { error: "REPLICATE_API_TOKEN is not configured." },
-      { status: 500 }
-    );
-  }
+  console.log("[/api/generate] Processing request...");
 
-  // 로그인 검사 제거
-  let userId = "anonymous";
-  let userName = "익명 사용자";
-  
-  // 로그인한 사용자인 경우에만 사용자 정보 가져오기
-  const { userId: clerkUserId } = await auth();
-  if (clerkUserId) {
-    userId = clerkUserId;
-    userName = '사용자';
-  }
-
-  // DB 연결 상태 확인
-  const dbConnected = isDatabaseConnected();
-  console.log("DB 연결 상태:", dbConnected ? "연결됨" : "연결 안됨");
-
-  // 사용자 사용량 제한 확인 (DB 연결이 있을 때만)
-  let canGenerate = true;
-  let remaining = 999; // 기본값으로 높은 값 설정
-  let subscription = null;
-
-  // 로그인한 사용자인 경우에만 사용량 제한 확인
-  if (dbConnected && clerkUserId) {
-    try {
-      const usageCheck = await canUserGenerate(userId);
-      canGenerate = usageCheck.canGenerate;
-      remaining = usageCheck.remaining;
-      
-      if (!canGenerate) {
-        subscription = await getUserSubscription(userId);
-        return NextResponse.json({
-          error: "You've used all available generations for this month.",
-          subscription: {
-            tier: subscription.tier,
-            maxGenerations: subscription.maxGenerations,
-            remaining: 0,
-            renewalDate: subscription.renewalDate
-          }
-        }, { status: 403 });
-      }
-    } catch (error) {
-      console.error("사용량 확인 중 오류 발생:", error);
-      // 사용량 확인에 실패하더라도 이미지 생성은 진행함
-      console.log("사용량 확인에 실패했지만 이미지 생성은 계속 진행합니다.");
-    }
-  } else {
-    console.log("로그인하지 않은 사용자이거나 DB 연결이 없어 사용량 제한 확인을 건너뜁니다.");
-  }
+  // Check if connected to Supabase database
+  const isConnected = (await supabase.from('users').select('id', { count: 'exact', head: true })).data !== null;
+  console.log(`[/api/generate] Connected to Supabase: ${isConnected}`);
 
   try {
-    const { prompt, style, size, gender, age, ratio, renderStyle, ethnicity, cameraDistance, clothing, hair, eyes, background, skinType, eyeColor, hairStyle } = await request.json();
+    // Get auth data - 비동기 함수로 처리
+    const session = await auth();
+    if (!session.userId) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in." },
+        { status: 401 }
+      );
+    }
+    
+    const userId = session.userId;
+    
+    // Check if user can generate more images based on their subscription
+    const { canGenerate, remaining } = await canUserGenerate(userId);
+    
+    if (!canGenerate) {
+      // 구독 정보 확인하여 더 구체적인 에러 메시지 제공
+      const subscriptionInfo = await getUserSubscription(userId);
+      const tier = subscriptionInfo.tier;
+      
+      // 무료 사용 횟수 소진 시 명확한 업그레이드 안내 메시지
+      return NextResponse.json(
+        { 
+          error: "사용 가능한 이미지 생성 횟수를 모두 소진했습니다.", 
+          details: {
+            message: "더 많은 이미지를 생성하려면 구독을 업그레이드하세요.",
+            tier: tier,
+            limit: subscriptionInfo.maxGenerations,
+            usedAll: true,
+            remainingGenerations: 0
+          }
+        },
+        { status: 402 } // 402 Payment Required
+      );
+    }
+
+    // Parse the request body
+    const bodyText = await request.text();
+    const body = JSON.parse(bodyText);
+    
+    const { prompt, style, size, gender, age, ratio, renderStyle, ethnicity, cameraDistance, clothing, hair, eyes, background, skinType, eyeColor, hairStyle } = body;
     console.log("요청 데이터:", { prompt, style, size, gender, age, ratio, renderStyle, ethnicity, cameraDistance, clothing, hair, eyes });
     
     if (!prompt) {
@@ -403,22 +392,33 @@ export async function POST(request: Request) {
         original_generation_id: isValidUUID(generationId) ? generationId : null,
       };
       
-      // 사용량 증가 처리 (DB 연결이 있을 때만)
-      if (dbConnected && clerkUserId) {
-        try {
-          await incrementUserGenerations(userId);
-          console.log("사용량 증가 완료.");
-        } catch (usageError) {
-          console.error("사용량 업데이트 중 오류 발생:", usageError);
-          // 사용량 업데이트 실패해도 계속 진행
-        }
+      // 사용량 증가 처리 - DB 연결 여부와 관계없이 항상 실행
+      try {
+        // 항상 사용량 증가 실행 (DB 연결 여부와 무관하게)
+        await incrementUserGenerations(userId);
+        console.log("사용량 증가 완료.");
+        
+        // 사용량 증가 후 다시 한번 사용 가능 여부 확인
+        const { remaining } = await canUserGenerate(userId);
+        
+        // DB 연결 여부와 상관없이 이미지 생성 결과 반환
+        return NextResponse.json({
+          ...result,
+          generatedImage,
+          userUsage: {
+            remaining: remaining
+          }
+        });
+      } catch (usageError) {
+        console.error("사용량 업데이트 중 오류 발생:", usageError);
+        // 사용량 업데이트 실패해도 계속 진행
+        
+        // DB 연결 여부와 상관없이 이미지 생성 결과 반환
+        return NextResponse.json({
+          ...result,
+          generatedImage
+        });
       }
-      
-      // DB 연결 여부와 상관없이 이미지 생성 결과 반환
-      return NextResponse.json({
-        ...result,
-        generatedImage
-      });
     }
 
     // 기본 응답

@@ -71,6 +71,46 @@ export async function POST(req: Request) {
       } else {
         console.log('사용자 데이터가 성공적으로 동기화됨:', id);
       }
+      
+      // 신규 사용자인 경우 (user.created 이벤트)
+      if (eventType === 'user.created') {
+        // 기존 구독 정보 확인
+        const { data: existingSubscription } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('user_id', id)
+          .single();
+          
+        // 구독 정보가 없는 경우에만 생성
+        if (!existingSubscription) {
+          // 다음 달 날짜 계산
+          const nextMonth = new Date();
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          
+          // 기본 구독 정보 생성
+          const { error: subscriptionError } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: id,
+              plan: 'starter',
+              billing_cycle: 'monthly',
+              auto_renew: true,
+              next_renewal_date: nextMonth.toISOString(),
+              cancelled: false,
+              created_at: new Date().toISOString(),
+              usage_count: 0,
+              last_reset_at: new Date().toISOString(),
+              is_active: true,
+              refunded: false
+            });
+            
+          if (subscriptionError) {
+            console.error('Supabase 구독 데이터 생성 오류:', subscriptionError);
+          } else {
+            console.log('사용자 기본 구독이 성공적으로 생성됨:', id);
+          }
+        }
+      }
     } catch (error) {
       console.error('사용자 데이터 동기화 중 예외 발생:', error);
     } finally {

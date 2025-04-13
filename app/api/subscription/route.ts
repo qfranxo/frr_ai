@@ -50,29 +50,89 @@ export async function GET() {
       
       return NextResponse.json({
         subscription: {
+          // 기본 정보
           tier: subscriptionData.plan,
           maxGenerations: maxGenerations,
           remaining: remaining,
-          renewalDate: subscriptionData.next_renewal_date,
-          // 추가 정보
-          startDate: subscriptionData.created_at,
-          nextBillingDate: subscriptionData.next_renewal_date,
-          autoRenew: subscriptionData.auto_renew
+          
+          // 모든 테이블 컬럼 데이터 포함
+          id: subscriptionData.id,
+          user_id: subscriptionData.user_id,
+          plan: subscriptionData.plan,
+          billing_cycle: subscriptionData.billing_cycle,
+          auto_renew: subscriptionData.auto_renew,
+          next_renewal_date: subscriptionData.next_renewal_date,
+          cancelled: subscriptionData.cancelled,
+          created_at: subscriptionData.created_at,
+          usage_count: subscriptionData.usage_count,
+          last_reset_at: subscriptionData.last_reset_at,
+          is_active: subscriptionData.is_active,
+          refunded: subscriptionData.refunded
         }
       });
     }
     
-    // Supabase에 정보가 없거나 조회 실패한 경우 기존 로직으로 폴백
-    // 사용자 구독 정보 가져오기 (getUserSubscription은 기본적으로 스타터 플랜 반환)
-    const subscription = await getUserSubscription(userId);
-    const { canGenerate, remaining } = await canUserGenerate(userId);
-
+    // 구독 정보가 없을 경우 구독 생성 시도
+    const defaultPlan = {
+      plan: 'starter',
+      billing_cycle: 'monthly',
+      auto_renew: true,
+      next_renewal_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      cancelled: false,
+      created_at: new Date().toISOString(),
+      usage_count: 0,
+      last_reset_at: new Date().toISOString(),
+      is_active: true,
+      refunded: false
+    };
+    
+    // 구독 레코드 생성
+    const { data: newSubscription, error: insertError } = await supabase
+      .from('subscriptions')
+      .insert({
+        user_id: userId,
+        ...defaultPlan
+      })
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('새 구독 생성 실패:', insertError);
+      
+      // 현재 메모리에 저장된 구독 정보 반환
+      const subscription = await getUserSubscription(userId);
+      const { canGenerate, remaining } = await canUserGenerate(userId);
+      
+      return NextResponse.json({
+        subscription: {
+          tier: subscription.tier,
+          maxGenerations: subscription.maxGenerations,
+          remaining: remaining,
+          renewalDate: subscription.renewalDate
+        }
+      });
+    }
+    
+    // 새로 생성된 구독 정보 반환
     return NextResponse.json({
       subscription: {
-        tier: subscription.tier,
-        maxGenerations: subscription.maxGenerations,
-        remaining: remaining,
-        renewalDate: subscription.renewalDate
+        tier: newSubscription.plan,
+        maxGenerations: newSubscription.plan === 'premium' ? 50 : 2,
+        remaining: newSubscription.plan === 'premium' ? 50 : 2,
+        
+        // 모든 테이블 컬럼 데이터 포함
+        id: newSubscription.id,
+        user_id: newSubscription.user_id,
+        plan: newSubscription.plan,
+        billing_cycle: newSubscription.billing_cycle,
+        auto_renew: newSubscription.auto_renew,
+        next_renewal_date: newSubscription.next_renewal_date,
+        cancelled: newSubscription.cancelled,
+        created_at: newSubscription.created_at,
+        usage_count: newSubscription.usage_count,
+        last_reset_at: newSubscription.last_reset_at,
+        is_active: newSubscription.is_active,
+        refunded: newSubscription.refunded
       }
     });
   } catch (error) {
